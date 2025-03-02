@@ -183,6 +183,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpszClassName = CLASS_NAME;
     wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.style = CS_HREDRAW | CS_VREDRAW;  // Add style for better keyboard input handling
     
     RegisterClassW(&wc);
     
@@ -235,6 +236,177 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_CREATE:
             return 0;
             
+        case WM_KEYDOWN: {
+            // Handle keyboard shortcuts
+            int keyCode = static_cast<int>(wParam);
+            bool shiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            bool ctrlPressed = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            
+            // Debug message to check key codes
+            wchar_t debugMsg[100];
+            swprintf(debugMsg, 100, L"Key pressed: %d, Shift: %d, Ctrl: %d", keyCode, shiftPressed, ctrlPressed);
+            OutputDebugStringW(debugMsg);
+            
+            // Handle numeric keys (0-9)
+            if ((keyCode >= '0' && keyCode <= '9') || 
+                (keyCode >= VK_NUMPAD0 && keyCode <= VK_NUMPAD9)) {
+                // Only handle numeric keys directly if shift is not pressed
+                // This allows Shift+6 and Shift+8 to be handled by WM_CHAR
+                if (!shiftPressed || (keyCode != '6' && keyCode != '8')) {
+                    wchar_t keyChar;
+                    if (keyCode >= '0' && keyCode <= '9') {
+                        keyChar = static_cast<wchar_t>(keyCode);
+                    } else {
+                        // Convert numpad key to character
+                        keyChar = static_cast<wchar_t>('0' + (keyCode - VK_NUMPAD0));
+                    }
+                    wchar_t buttonText[2] = { keyChar, L'\0' };
+                    HandleButtonClick(buttonText);
+                    return 0;
+                }
+            }
+            
+            // Handle decimal point
+            if (keyCode == VK_DECIMAL || (keyCode == VK_OEM_PERIOD && !shiftPressed)) {
+                HandleButtonClick(L".");
+                return 0;
+            }
+            
+            // Handle basic operations using a more consistent approach
+            
+            // Check for equals key (with and without shift)
+            if (keyCode == VK_OEM_PLUS || keyCode == '=') {
+                if (shiftPressed) {
+                    // Shift+= is addition
+                    HandleButtonClick(L"+");
+                } else {
+                    // = without shift is equals
+                    HandleButtonClick(L"=");
+                }
+                return 0;
+            }
+            
+            // Check for numpad addition
+            if (keyCode == VK_ADD) {
+                HandleButtonClick(L"+");
+                return 0;
+            }
+            
+            // Check for subtraction
+            if (keyCode == VK_SUBTRACT || keyCode == VK_OEM_MINUS) {
+                HandleButtonClick(L"-");
+                return 0;
+            }
+            
+            // Check for 8 key (with and without shift)
+            if (keyCode == '8') {
+                if (shiftPressed) {
+                    // Shift+8 is multiplication
+                    HandleButtonClick(L"x");
+                } else {
+                    // 8 without shift is just 8
+                    HandleButtonClick(L"8");
+                }
+                return 0;
+            }
+            
+            // Check for numpad multiplication and X key
+            if (keyCode == VK_MULTIPLY || keyCode == 'X' || keyCode == 'x') {
+                HandleButtonClick(L"x");
+                return 0;
+            }
+            
+            // Check for division
+            if (keyCode == VK_DIVIDE || keyCode == VK_OEM_2 || 
+                (keyCode == '/' && !shiftPressed)) {
+                HandleButtonClick(L"/");
+                return 0;
+            }
+            
+            // Check for 6 key (with and without shift)
+            if (keyCode == '6') {
+                if (shiftPressed) {
+                    // Shift+6 is power (^)
+                    HandleButtonClick(L"^");
+                } else {
+                    // 6 without shift is just 6
+                    HandleButtonClick(L"6");
+                }
+                return 0;
+            }
+            
+            // Check for caret key directly
+            if (keyCode == '^') {
+                HandleButtonClick(L"^");
+                return 0;
+            }
+            
+            // Handle Enter key for calculation
+            if (keyCode == VK_RETURN) {
+                HandleButtonClick(L"=");
+                return 0;
+            }
+            
+            // Handle clear (ESC)
+            if (keyCode == VK_ESCAPE) {
+                HandleButtonClick(L"C");
+                return 0;
+            }
+            
+            // Handle special operations
+            if (keyCode == 'S' || keyCode == 's') {  // Square root
+                HandleButtonClick(L"s");
+                return 0;
+            }
+            
+            if (keyCode == 'L' || keyCode == 'l') {  // Natural logarithm
+                if (shiftPressed) {
+                    HandleButtonClick(L"log");  // Base 10 logarithm
+                } else {
+                    HandleButtonClick(L"ln");   // Natural logarithm
+                }
+                return 0;
+            }
+            
+            // Handle memory operations
+            if (keyCode == 'M' || keyCode == 'm') {
+                if (shiftPressed && ctrlPressed) {
+                    HandleButtonClick(L"MC");   // Memory Clear
+                } else if (shiftPressed) {
+                    HandleButtonClick(L"M-");   // Memory Subtract
+                } else if (ctrlPressed) {
+                    HandleButtonClick(L"MR");   // Memory Recall
+                } else {
+                    HandleButtonClick(L"M+");   // Memory Add
+                }
+                return 0;
+            }
+            
+            return 0;
+        }
+        
+        case WM_CHAR: {
+            // Handle character input for special symbols
+            int charCode = static_cast<int>(wParam);
+            
+            // Debug message to check character codes
+            wchar_t debugMsg[100];
+            swprintf(debugMsg, 100, L"Char received: %d", charCode);
+            OutputDebugStringW(debugMsg);
+            
+            // Handle special characters from Shift+number combinations
+            if (charCode == '^') {  // Shift+6 (power)
+                HandleButtonClick(L"^");
+                return 0;
+            }
+            else if (charCode == '*') {  // Shift+8 (multiplication)
+                HandleButtonClick(L"x");
+                return 0;
+            }
+            
+            return 0;
+        }
+        
         case WM_COMMAND: {
             int buttonId = LOWORD(wParam);
             
@@ -787,7 +959,7 @@ void ShowAboutDialog(HWND hwnd) {
     // Create a simple message box as an About dialog
     MessageBoxW(hwnd,
         L"C++ Calculator\n\n"
-        L"Version 1.0\n\n"
+        L"Version 1.1\n\n"
         L"A comprehensive calculator application with both\n"
         L"basic arithmetic and scientific operations.\n\n"
         L"Features:\n"
@@ -795,7 +967,22 @@ void ShowAboutDialog(HWND hwnd) {
         L"- Memory functions\n"
         L"- Complex expression evaluation\n"
         L"- Calculation history\n"
-        L"- Customizable themes\n\n"
+        L"- Customizable themes\n"
+        L"- Keyboard shortcuts\n\n"
+        L"Keyboard Shortcuts:\n"
+        L"- 0-9: Number keys (numpad also works)\n"
+        L"- +, -, *, /: Basic operations\n"
+        L"- Enter: Calculate (=)\n"
+        L"- Esc: Clear (C)\n"
+        L"- . (period): Decimal point\n"
+        L"- S: Square root\n"
+        L"- ^ (Shift+6): Power\n"
+        L"- L: Natural logarithm (ln)\n"
+        L"- Shift+L: Base-10 logarithm (log)\n"
+        L"- M: Memory add (M+)\n"
+        L"- Shift+M: Memory subtract (M-)\n"
+        L"- Ctrl+M: Memory recall (MR)\n"
+        L"- Ctrl+Shift+M: Memory clear (MC)\n\n"
         L"© 2024 - MIT License",
         L"About C++ Calculator",
         MB_OK | MB_ICONINFORMATION);

@@ -33,6 +33,12 @@ A comprehensive calculator application written in C++ with a graphical user inte
   - History display showing previous calculations
   - Multiple theme options
 
+- Keyboard shortcuts for all operations:
+  - Number keys and operators
+  - Function keys for memory operations
+  - Scientific operations via keyboard
+  - See "Keyboard Shortcuts" section for details
+
 - Customizable themes:
   - Default theme (Light)
   - Dark theme
@@ -97,6 +103,31 @@ The graphical interface provides:
 - Operation display showing the current operation and first operand
 - Memory indicator showing when a value is stored in memory
 - History display showing previous calculations in chronological order (newest at the top)
+
+### Keyboard Shortcuts
+
+The calculator supports keyboard input for all operations, making it faster and more efficient to use:
+
+| Key/Combination | Function |
+|-----------------|----------|
+| 0-9 | Number keys (regular keyboard and numpad) |
+| . | Decimal point |
+| + | Addition |
+| - | Subtraction |
+| * or x | Multiplication |
+| / | Division |
+| Enter | Calculate (=) |
+| Esc | Clear (C) |
+| S | Square root |
+| ^ (Shift+6) | Power/Exponentiation |
+| L | Natural logarithm (ln) |
+| Shift+L | Base-10 logarithm (log) |
+| M | Memory add (M+) |
+| Shift+M | Memory subtract (M-) |
+| Ctrl+M | Memory recall (MR) |
+| Ctrl+Shift+M | Memory clear (MC) |
+
+*Note: Keyboard shortcuts are also listed in the About dialog (click the About button)*
 
 ### Example Operations
 
