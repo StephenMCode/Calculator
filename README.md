@@ -31,6 +31,14 @@ A comprehensive calculator application written in C++ with a graphical user inte
   - About dialog
   - Operation display showing current calculation
   - History display showing previous calculations
+  - Multiple theme options
+
+- Customizable themes:
+  - Default theme (Light)
+  - Dark theme
+  - Blue theme
+  - Theme switching at runtime
+  - Color-coded buttons by function
 
 - Robust error handling for:
   - Invalid operations
@@ -85,6 +93,7 @@ The graphical interface provides:
 - Clear button (C)
 - Equals button (=)
 - About button
+- Theme button (cycles through available themes)
 - Operation display showing the current operation and first operand
 - Memory indicator showing when a value is stored in memory
 - History display showing previous calculations in chronological order (newest at the top)
@@ -112,6 +121,21 @@ The calculator includes a history panel that:
 - Includes both the expression and the result
 - Allows scrolling through previous calculations
 - Persists until the application is closed
+
+### Theme System
+
+The calculator features a customizable theme system that allows users to change the visual appearance:
+- **Default Theme**: A light theme with soft pastel colors for different button types
+- **Dark Theme**: A dark-mode theme with contrasting colors for comfortable use in low-light environments
+- **Blue Theme**: A blue-tinted theme with a professional appearance
+
+Each theme customizes:
+- Window background
+- Display background and text
+- Button backgrounds and text colors (with different colors for different button types)
+- History display background and text
+
+To change themes, simply click the "Theme" button to cycle through available options.
 
 ## License
 

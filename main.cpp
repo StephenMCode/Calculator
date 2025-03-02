@@ -1,4 +1,6 @@
 #include <windows.h>
+#include <windowsx.h>
+#include <CommCtrl.h>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -11,10 +13,108 @@
 #include <algorithm> // For std::min
 #include "calculator.h"
 
-// Add debug function for message boxes
-void DebugMessage(const std::wstring& message) {
-    MessageBoxW(NULL, message.c_str(), L"Debug Info", MB_OK | MB_ICONINFORMATION);
-}
+// Add missing control messages
+#ifndef EM_SETBKGNDCOLOR
+#define EM_SETBKGNDCOLOR (WM_USER + 67)
+#endif
+
+// Theme definitions
+struct ThemeColors {
+    std::wstring name;
+    COLORREF windowBackground;
+    COLORREF displayBackground;
+    COLORREF displayText;
+    COLORREF numericButtonBackground;
+    COLORREF operatorButtonBackground;
+    COLORREF equalButtonBackground;
+    COLORREF clearButtonBackground;
+    COLORREF memoryButtonBackground;
+    COLORREF specialButtonBackground;
+    COLORREF historyBackground;
+    COLORREF historyText;
+    // Replace the single buttonText with specific text colors for different button types
+    COLORREF numericButtonText;
+    COLORREF operatorButtonText;
+    COLORREF equalButtonText;
+    COLORREF clearButtonText;
+    COLORREF memoryButtonText;
+    COLORREF specialButtonText;
+    COLORREF utilityButtonText; // For Theme and About buttons
+};
+
+// Theme collection
+std::vector<ThemeColors> availableThemes = {
+    // Default theme
+    {
+        L"Default",
+        RGB(240, 240, 240),      // Window background
+        RGB(255, 255, 255),      // Display background
+        RGB(0, 0, 0),            // Display text
+        RGB(240, 240, 240),      // Numeric button background
+        RGB(173, 216, 230),      // Operator button background
+        RGB(144, 238, 144),      // Equal button background
+        RGB(255, 128, 128),      // Clear button background
+        RGB(255, 128, 128),      // Memory button background
+        RGB(173, 216, 230),      // Special button background
+        RGB(255, 255, 255),      // History background
+        RGB(0, 0, 0),            // History text
+        RGB(0, 0, 0),            // Numeric button text
+        RGB(0, 0, 0),            // Operator button text
+        RGB(0, 60, 0),           // Equal button text (darker green for contrast)
+        RGB(60, 0, 0),           // Clear button text (darker red for contrast)
+        RGB(60, 0, 0),           // Memory button text
+        RGB(0, 0, 80),           // Special button text (darker blue for contrast)
+        RGB(0, 0, 0)             // Utility button text
+    },
+    // Dark theme
+    {
+        L"Dark",
+        RGB(50, 50, 50),         // Window background
+        RGB(30, 30, 30),         // Display background
+        RGB(220, 220, 220),      // Display text
+        RGB(70, 70, 70),         // Numeric button background
+        RGB(100, 100, 140),      // Operator button background (slightly brighter blue)
+        RGB(70, 140, 70),        // Equal button background (slightly brighter green)
+        RGB(140, 70, 70),        // Clear button background (slightly brighter red)
+        RGB(140, 70, 70),        // Memory button background
+        RGB(70, 110, 140),       // Special button background (brighter for contrast)
+        RGB(40, 40, 40),         // History background
+        RGB(200, 200, 200),      // History text
+        RGB(220, 220, 220),      // Numeric button text
+        RGB(240, 240, 240),      // Operator button text (brighter for contrast)
+        RGB(230, 255, 230),      // Equal button text (lighter green for contrast)
+        RGB(255, 230, 230),      // Clear button text (lighter red for contrast) 
+        RGB(255, 230, 230),      // Memory button text
+        RGB(220, 235, 255),      // Special button text (lighter blue for contrast)
+        RGB(220, 220, 220)       // Utility button text
+    },
+    // Blue theme
+    {
+        L"Blue",
+        RGB(230, 240, 250),      // Window background
+        RGB(240, 250, 255),      // Display background
+        RGB(0, 30, 60),          // Display text
+        RGB(200, 220, 240),      // Numeric button background
+        RGB(150, 180, 210),      // Operator button background
+        RGB(120, 200, 170),      // Equal button background
+        RGB(240, 150, 150),      // Clear button background
+        RGB(180, 180, 220),      // Memory button background
+        RGB(150, 180, 210),      // Special button background
+        RGB(240, 250, 255),      // History background
+        RGB(0, 30, 60),          // History text
+        RGB(0, 30, 60),          // Numeric button text
+        RGB(0, 30, 80),          // Operator button text (darker blue for contrast)
+        RGB(0, 60, 40),          // Equal button text (darker green for contrast)
+        RGB(100, 0, 0),          // Clear button text (darker red for contrast)
+        RGB(40, 40, 100),        // Memory button text (darker purple for contrast)
+        RGB(0, 40, 80),          // Special button text (darker blue for contrast)
+        RGB(30, 30, 30)          // Utility button text (dark gray for contrast)
+    }
+};
+
+// Current theme index
+int currentThemeIndex = 0;
+ThemeColors* currentTheme = &availableThemes[currentThemeIndex];
 
 // Helper function to convert std::string to std::wstring
 std::wstring StringToWString(const std::string& str) {
@@ -69,6 +169,8 @@ bool IsOperator(char c);
 int GetPrecedence(char op);
 double ApplyOperator(double a, double b, char op);
 double EvaluateExpression(const std::string& expression);
+void SwitchTheme();
+void ApplyTheme(HWND hwnd);
 
 // Entry point
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
@@ -142,14 +244,91 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 wchar_t buttonText[20];
                 GetWindowTextW(buttonHwnd, buttonText, sizeof(buttonText)/sizeof(wchar_t));
                 
-                // Check if it's the About button
+                // Check if it's a special button
                 if (wcscmp(buttonText, L"About") == 0) {
                     ShowAboutDialog(hwnd);
+                } else if (wcscmp(buttonText, L"Theme") == 0) {
+                    SwitchTheme();
+                    ApplyTheme(hwnd);
                 } else {
                     HandleButtonClick(buttonText);
                 }
             }
             return 0;
+        }
+        
+        case WM_CTLCOLORBTN: {
+            HDC hdcBtn = (HDC)wParam;
+            HWND hwndBtn = (HWND)lParam;
+            
+            // Find which button this is
+            int buttonIndex = -1;
+            for (int i = 0; i < 29; i++) {
+                if (hwndBtn == hWndButtons[i]) {
+                    buttonIndex = i;
+                    break;
+                }
+            }
+            
+            if (buttonIndex >= 0) {
+                // Get corresponding button definition from buttons array
+                // Since we can't access the buttons vector here, use a similar approach
+                COLORREF bgColor = currentTheme->numericButtonBackground; // Default
+                COLORREF txtColor = currentTheme->numericButtonText; // Default
+                
+                // Determine button type from its text
+                wchar_t buttonText[20];
+                GetWindowTextW(hwndBtn, buttonText, sizeof(buttonText)/sizeof(wchar_t));
+                
+                if (wcscmp(buttonText, L"C") == 0) {
+                    bgColor = currentTheme->clearButtonBackground;
+                    txtColor = currentTheme->clearButtonText;
+                } else if (wcscmp(buttonText, L"=") == 0) {
+                    bgColor = currentTheme->equalButtonBackground;
+                    txtColor = currentTheme->equalButtonText;
+                } else if (wcscmp(buttonText, L"+") == 0 || wcscmp(buttonText, L"-") == 0 ||
+                           wcscmp(buttonText, L"x") == 0 || wcscmp(buttonText, L"/") == 0) {
+                    bgColor = currentTheme->operatorButtonBackground;
+                    txtColor = currentTheme->operatorButtonText;
+                } else if (wcscmp(buttonText, L"M+") == 0 || wcscmp(buttonText, L"M-") == 0 ||
+                           wcscmp(buttonText, L"MC") == 0 || wcscmp(buttonText, L"MR") == 0) {
+                    bgColor = currentTheme->memoryButtonBackground;
+                    txtColor = currentTheme->memoryButtonText;
+                } else if (wcscmp(buttonText, L"s") == 0 || wcscmp(buttonText, L"^") == 0 ||
+                          wcscmp(buttonText, L"ln") == 0 || wcscmp(buttonText, L"log") == 0) {
+                    bgColor = currentTheme->specialButtonBackground;
+                    txtColor = currentTheme->specialButtonText;
+                } else if (wcscmp(buttonText, L"Theme") == 0 || wcscmp(buttonText, L"About") == 0) {
+                    // For Theme and About buttons, use utility button colors
+                    if (wcscmp(buttonText, L"Theme") == 0) {
+                        bgColor = RGB(180, 180, 180);
+                    } else {
+                        bgColor = RGB(200, 200, 200);
+                    }
+                    txtColor = currentTheme->utilityButtonText;
+                }
+                
+                SetBkColor(hdcBtn, bgColor);
+                SetTextColor(hdcBtn, txtColor);
+                return (LRESULT)CreateSolidBrush(bgColor);
+            }
+            break;
+        }
+        
+        case WM_CTLCOLOREDIT: {
+            HDC hdcEdit = (HDC)wParam;
+            HWND hwndEdit = (HWND)lParam;
+            
+            if (hwndEdit == hWndDisplay) {
+                SetTextColor(hdcEdit, currentTheme->displayText);
+                SetBkColor(hdcEdit, currentTheme->displayBackground);
+                return (LRESULT)CreateSolidBrush(currentTheme->displayBackground);
+            } else if (hwndEdit == hWndHistoryList) {
+                SetTextColor(hdcEdit, currentTheme->historyText);
+                SetBkColor(hdcEdit, currentTheme->historyBackground);
+                return (LRESULT)CreateSolidBrush(currentTheme->historyBackground);
+            }
+            break;
         }
         
         case WM_DESTROY:
@@ -159,52 +338,57 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         default:
             return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
+    return 0;
 }
 
 // Create the calculator UI
 void CreateCalculatorUI(HWND hwnd) {
-    // Define button layout
+    // Define button layout using current theme colors
     std::vector<ButtonDef> buttons = {
         // Row 1
-        {L"C", 20, 100, 60, 50, RGB(255, 128, 128)},
-        {L"s", 90, 100, 60, 50, RGB(173, 216, 230)},
-        {L"^", 160, 100, 60, 50, RGB(173, 216, 230)},
-        {L"/", 230, 100, 60, 50, RGB(173, 216, 230)},
+        {L"C", 20, 100, 60, 50, currentTheme->clearButtonBackground},
+        {L"s", 90, 100, 60, 50, currentTheme->specialButtonBackground},
+        {L"^", 160, 100, 60, 50, currentTheme->specialButtonBackground},
+        {L"/", 230, 100, 60, 50, currentTheme->operatorButtonBackground},
         
         // Row 2
-        {L"7", 20, 160, 60, 50, RGB(240, 240, 240)},
-        {L"8", 90, 160, 60, 50, RGB(240, 240, 240)},
-        {L"9", 160, 160, 60, 50, RGB(240, 240, 240)},
-        {L"x", 230, 160, 60, 50, RGB(173, 216, 230)},
+        {L"7", 20, 160, 60, 50, currentTheme->numericButtonBackground},
+        {L"8", 90, 160, 60, 50, currentTheme->numericButtonBackground},
+        {L"9", 160, 160, 60, 50, currentTheme->numericButtonBackground},
+        {L"x", 230, 160, 60, 50, currentTheme->operatorButtonBackground},
         
         // Row 3
-        {L"4", 20, 220, 60, 50, RGB(240, 240, 240)},
-        {L"5", 90, 220, 60, 50, RGB(240, 240, 240)},
-        {L"6", 160, 220, 60, 50, RGB(240, 240, 240)},
-        {L"-", 230, 220, 60, 50, RGB(173, 216, 230)},
+        {L"4", 20, 220, 60, 50, currentTheme->numericButtonBackground},
+        {L"5", 90, 220, 60, 50, currentTheme->numericButtonBackground},
+        {L"6", 160, 220, 60, 50, currentTheme->numericButtonBackground},
+        {L"-", 230, 220, 60, 50, currentTheme->operatorButtonBackground},
         
         // Row 4
-        {L"1", 20, 280, 60, 50, RGB(240, 240, 240)},
-        {L"2", 90, 280, 60, 50, RGB(240, 240, 240)},
-        {L"3", 160, 280, 60, 50, RGB(240, 240, 240)},
-        {L"+", 230, 280, 60, 50, RGB(173, 216, 230)},
+        {L"1", 20, 280, 60, 50, currentTheme->numericButtonBackground},
+        {L"2", 90, 280, 60, 50, currentTheme->numericButtonBackground},
+        {L"3", 160, 280, 60, 50, currentTheme->numericButtonBackground},
+        {L"+", 230, 280, 60, 50, currentTheme->operatorButtonBackground},
         
         // Row 5
-        {L"0", 20, 340, 60, 50, RGB(240, 240, 240)},
-        {L".", 90, 340, 60, 50, RGB(240, 240, 240)},
-        {L"ln", 160, 340, 60, 50, RGB(173, 216, 230)},
-        {L"=", 230, 340, 60, 50, RGB(144, 238, 144)},
+        {L"0", 20, 340, 60, 50, currentTheme->numericButtonBackground},
+        {L".", 90, 340, 60, 50, currentTheme->numericButtonBackground},
+        {L"ln", 160, 340, 60, 50, currentTheme->specialButtonBackground},
+        {L"=", 230, 340, 60, 50, currentTheme->equalButtonBackground},
         
-        // Row 6 (new row for log and About)
-        {L"log", 20, 400, 130, 40, RGB(173, 216, 230)},
-        {L"About", 160, 400, 130, 40, RGB(200, 200, 200)},
+        // Row 6 (new row for log, About, and Theme)
+        {L"log", 20, 400, 90, 40, currentTheme->specialButtonBackground},
+        {L"About", 120, 400, 80, 40, RGB(200, 200, 200)},
+        {L"Theme", 210, 400, 80, 40, RGB(180, 180, 180)},
         
         // Row 7 (memory buttons)
-        {L"M+", 20, 450, 60, 50, RGB(255, 128, 128)},
-        {L"M-", 90, 450, 60, 50, RGB(173, 216, 230)},
-        {L"MR", 160, 450, 60, 50, RGB(240, 240, 240)},
-        {L"MC", 230, 450, 60, 50, RGB(173, 216, 230)}
+        {L"M+", 20, 450, 60, 50, currentTheme->memoryButtonBackground},
+        {L"M-", 90, 450, 60, 50, currentTheme->memoryButtonBackground},
+        {L"MR", 160, 450, 60, 50, currentTheme->numericButtonBackground},
+        {L"MC", 230, 450, 60, 50, currentTheme->memoryButtonBackground}
     };
+    
+    // Set window background color
+    SetClassLongPtr(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(currentTheme->windowBackground));
     
     // Create memory indicator (small field to the right of the display)
     hWndMemoryIndicator = CreateWindowExW(
@@ -222,6 +406,10 @@ void CreateCalculatorUI(HWND hwnd) {
         hwnd, (HMENU)999, NULL, NULL
     );
     
+    // Set display colors
+    SendMessage(hWndDisplay, EM_SETBKGNDCOLOR, 0, currentTheme->displayBackground);
+    SendMessage(hWndDisplay, WM_CTLCOLOREDIT, 0, (LPARAM)currentTheme->displayText);
+    
     // Create history list box (to the right of the calculator)
     hWndHistoryList = CreateWindowExW(
         0, L"EDIT", L"",
@@ -230,15 +418,13 @@ void CreateCalculatorUI(HWND hwnd) {
         hwnd, (HMENU)996, NULL, NULL
     );
     
-    // Debug info about listbox creation
-    std::wstring listboxDebugInfo = L"History display created with styles: " + 
-                                   StringToWString(std::to_string(WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_READONLY | WS_VSCROLL));
-    DebugMessage(listboxDebugInfo);
+    // Set history colors
+    SendMessage(hWndHistoryList, EM_SETBKGNDCOLOR, 0, currentTheme->historyBackground);
     
     // Set a font for the history list box
     HFONT hHistoryFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                              DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                              CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+                          DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                          CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SendMessage(hWndHistoryList, WM_SETFONT, (WPARAM)hHistoryFont, TRUE);
     
     // Set display fonts
@@ -257,14 +443,18 @@ void CreateCalculatorUI(HWND hwnd) {
             hwnd, (HMENU)(1000 + i), NULL, NULL
         );
         
+        // Store button handle
+        hWndButtons[i] = hButton;
+        
         // Set button font
         HFONT hBtnFont = CreateFontW(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                                   CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         SendMessage(hButton, WM_SETFONT, (WPARAM)hBtnFont, TRUE);
         
-        // Store button handle
-        hWndButtons[i] = hButton;
+        // Set button color
+        // This is done using owner-drawn buttons with WM_CTLCOLORBTN
+        SendMessage(hButton, WM_CTLCOLORBTN, 0, (LPARAM)btn.bgColor);
     }
 }
 
@@ -273,13 +463,6 @@ void HandleButtonClick(const wchar_t* buttonText) {
     // Convert wide string to narrow string for processing
     std::string narrowButtonText = WStringToString(buttonText);
     const char* buttonTextChar = narrowButtonText.c_str();
-    
-    // Debug for = button
-    if (buttonTextChar[0] == '=') {
-        std::wstring buttonDebugInfo = L"= button clicked. Current expression: " + 
-                                      StringToWString(currentExpression);
-        DebugMessage(buttonDebugInfo);
-    }
     
     // Handle numeric buttons and decimal point
     if (isdigit(buttonTextChar[0]) || (buttonTextChar[0] == '.' && buttonTextChar[1] == '\0')) {
@@ -383,25 +566,6 @@ void HandleButtonClick(const wchar_t* buttonText) {
                 double expressionValue = EvaluateExpression(currentExpression);
                 double result = calculator.squareRoot(expressionValue);
                 
-                // Format for history
-                std::string historyEntry = "sqrt(" + currentExpression + ") = " + std::to_string(result);
-                
-                // Remove trailing zeros
-                historyEntry.erase(historyEntry.find_last_not_of('0') + 1, std::string::npos);
-                if (historyEntry.back() == '.') {
-                    historyEntry.pop_back();
-                }
-                
-                calculationHistory.push_back(historyEntry);
-                
-                // Limit history size to 20 entries
-                if (calculationHistory.size() > 20) {
-                    calculationHistory.erase(calculationHistory.begin());
-                }
-                
-                // Update history display
-                UpdateHistoryDisplay();
-                
                 // Set the result as the new expression
                 currentExpression = std::to_string(result);
                 // Remove trailing zeros
@@ -435,25 +599,6 @@ void HandleButtonClick(const wchar_t* buttonText) {
                     break;
                 }
                 
-                // Format for history
-                std::string historyEntry = funcName + "(" + currentExpression + ") = " + std::to_string(result);
-                
-                // Remove trailing zeros
-                historyEntry.erase(historyEntry.find_last_not_of('0') + 1, std::string::npos);
-                if (historyEntry.back() == '.') {
-                    historyEntry.pop_back();
-                }
-                
-                calculationHistory.push_back(historyEntry);
-                
-                // Limit history size to 20 entries
-                if (calculationHistory.size() > 20) {
-                    calculationHistory.erase(calculationHistory.begin());
-                }
-                
-                // Update history display
-                UpdateHistoryDisplay();
-                
                 // Set the result as the new expression
                 currentExpression = std::to_string(result);
                 // Remove trailing zeros
@@ -471,7 +616,6 @@ void HandleButtonClick(const wchar_t* buttonText) {
             break;
             
         case '=': // Calculate result
-            DebugMessage(L"Calling CalculateExpression from = button");
             CalculateExpression();
             break;
     }
@@ -503,11 +647,6 @@ void UpdateMemoryIndicator() {
 
 // Update the history display
 void UpdateHistoryDisplay() {
-    // Debug info about history size
-    std::wstring historyDebugInfo = L"UpdateHistoryDisplay called. History size: " + 
-                                   StringToWString(std::to_string(calculationHistory.size()));
-    DebugMessage(historyDebugInfo);
-
     // Create the history text
     std::wstring historyText = L"Calculation History:\r\n";
     
@@ -516,22 +655,12 @@ void UpdateHistoryDisplay() {
         // Convert the history entry to a wide string
         std::wstring historyItem = StringToWString(calculationHistory[i]);
         
-        // Debug info for each history item
-        std::wstring itemDebugInfo = L"Adding history item #" + StringToWString(std::to_string(i)) + 
-                                     L": [" + historyItem + L"] Length: " + 
-                                     StringToWString(std::to_string(historyItem.length()));
-        DebugMessage(itemDebugInfo);
-        
         // Add the history item to the text
         historyText += historyItem + L"\r\n";
     }
     
     // Set the text to the history display
     SetWindowTextW(hWndHistoryList, historyText.c_str());
-    
-    // Debug final text
-    std::wstring finalTextDebugInfo = L"Final history text: [" + historyText + L"]";
-    DebugMessage(finalTextDebugInfo);
 }
 
 // Memory operations
@@ -599,11 +728,6 @@ void CalculateExpression() {
             return;
         }
         
-        // Debug at start of calculation
-        std::wstring startDebugInfo = L"CalculateExpression called with expression: " + 
-                                     StringToWString(currentExpression);
-        DebugMessage(startDebugInfo);
-        
         // Store the original expression for history
         std::string originalExpression = currentExpression;
         
@@ -629,18 +753,7 @@ void CalculateExpression() {
         // Add to history
         std::string historyEntry = displayExpression + " = " + resultStr;
         
-        // Debug history entry creation
-        std::wstring historyDebugInfo = L"Created history entry: [" + 
-                                       StringToWString(historyEntry) + L"] Length: " + 
-                                       StringToWString(std::to_string(historyEntry.length()));
-        DebugMessage(historyDebugInfo);
-        
         calculationHistory.push_back(historyEntry);
-        
-        // Debug after adding to history vector
-        std::wstring vectorDebugInfo = L"Added to history vector. New size: " + 
-                                      StringToWString(std::to_string(calculationHistory.size()));
-        DebugMessage(vectorDebugInfo);
         
         // Limit history size to 20 entries
         if (calculationHistory.size() > 20) {
@@ -656,11 +769,6 @@ void CalculateExpression() {
         UpdateDisplay(currentExpression);
         newExpression = true;
     } catch (const std::exception& e) {
-        // Debug exception
-        std::wstring exceptionDebugInfo = L"Exception in CalculateExpression: " + 
-                                         StringToWString(e.what());
-        DebugMessage(exceptionDebugInfo);
-        
         UpdateDisplay(e.what());
         ClearCalculator();
     }
@@ -682,6 +790,12 @@ void ShowAboutDialog(HWND hwnd) {
         L"Version 1.0\n\n"
         L"A comprehensive calculator application with both\n"
         L"basic arithmetic and scientific operations.\n\n"
+        L"Features:\n"
+        L"- Basic & scientific operations\n"
+        L"- Memory functions\n"
+        L"- Complex expression evaluation\n"
+        L"- Calculation history\n"
+        L"- Customizable themes\n\n"
         L"© 2024 - MIT License",
         L"About C++ Calculator",
         MB_OK | MB_ICONINFORMATION);
@@ -790,4 +904,36 @@ double EvaluateExpression(const std::string& expression) {
     
     // Final result should be at the top of the values stack
     return values.top();
+}
+
+// Function to switch to the next theme
+void SwitchTheme() {
+    // Cycle to the next theme
+    currentThemeIndex = (currentThemeIndex + 1) % availableThemes.size();
+    currentTheme = &availableThemes[currentThemeIndex];
+    
+    // Show theme change message
+    std::wstring message = L"Theme changed to: " + currentTheme->name;
+    MessageBoxW(NULL, message.c_str(), L"Theme Changed", MB_OK | MB_ICONINFORMATION);
+}
+
+// Function to apply the current theme to all UI elements
+void ApplyTheme(HWND hwnd) {
+    // Recreate the UI with the new theme
+    // First, destroy all child windows
+    EnumChildWindows(hwnd, [](HWND hwndChild, LPARAM lParam) -> BOOL {
+        DestroyWindow(hwndChild);
+        return TRUE;
+    }, 0);
+    
+    // Recreate the UI
+    CreateCalculatorUI(hwnd);
+    
+    // Refresh the memory indicator and history
+    UpdateMemoryIndicator();
+    UpdateHistoryDisplay();
+    
+    // Force repaint
+    InvalidateRect(hwnd, NULL, TRUE);
+    UpdateWindow(hwnd);
 } 
