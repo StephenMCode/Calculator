@@ -10,6 +10,10 @@ void displayMenu() {
     std::cout << "  - : Subtraction\n";
     std::cout << "  * : Multiplication\n";
     std::cout << "  / : Division\n";
+    std::cout << "  s : Square Root\n";
+    std::cout << "  p : Power (x^y)\n";
+    std::cout << "  l : Logarithm (log_y(x))\n";
+    std::cout << "  n : Natural Logarithm (ln(x))\n";
     std::cout << "  q : Quit\n";
     std::cout << "=========================\n";
 }
@@ -44,24 +48,48 @@ int main() {
         }
         
         // Get operands from user
-        std::cout << "Enter first number: ";
-        while (!(std::cin >> num1)) {
-            std::cout << "Error: Invalid input. Please enter a number: ";
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        }
-        
-        std::cout << "Enter second number: ";
-        while (!(std::cin >> num2)) {
-            std::cout << "Error: Invalid input. Please enter a number: ";
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        if (operation == 's' || operation == 'n') {
+            // Operations that only need one number
+            std::cout << "Enter number: ";
+            while (!(std::cin >> num1)) {
+                std::cout << "Error: Invalid input. Please enter a number: ";
+                std::cin.clear();
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            }
+            num2 = 0; // Not used for these operations
+        } else {
+            // Operations that need two numbers
+            std::cout << "Enter first number: ";
+            while (!(std::cin >> num1)) {
+                std::cout << "Error: Invalid input. Please enter a number: ";
+                std::cin.clear();
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            }
+            
+            std::cout << "Enter second number: ";
+            while (!(std::cin >> num2)) {
+                std::cout << "Error: Invalid input. Please enter a number: ";
+                std::cin.clear();
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            }
         }
         
         // Perform calculation
         try {
             double result = calculator.calculate(num1, num2, operation);
-            std::cout << "Result: " << num1 << " " << operation << " " << num2 << " = " << result << std::endl;
+            
+            // Display result with appropriate format based on operation
+            if (operation == 's') {
+                std::cout << "Result: sqrt(" << num1 << ") = " << result << std::endl;
+            } else if (operation == 'n') {
+                std::cout << "Result: ln(" << num1 << ") = " << result << std::endl;
+            } else if (operation == 'p') {
+                std::cout << "Result: " << num1 << "^" << num2 << " = " << result << std::endl;
+            } else if (operation == 'l') {
+                std::cout << "Result: log_" << num2 << "(" << num1 << ") = " << result << std::endl;
+            } else {
+                std::cout << "Result: " << num1 << " " << operation << " " << num2 << " = " << result << std::endl;
+            }
         } catch (const std::exception& e) {
             std::cout << "Error: " << e.what() << std::endl;
         }
