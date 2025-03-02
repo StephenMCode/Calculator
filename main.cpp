@@ -119,6 +119,10 @@ std::vector<ThemeColors> availableThemes = {
 int currentThemeIndex = 0;
 ThemeColors* currentTheme = &availableThemes[currentThemeIndex];
 
+// Add brush storage for memory management
+HBRUSH themeBackgroundBrush = NULL;
+HBRUSH buttonBrushes[10] = {NULL}; // Array to store different button type brushes
+
 // Global debug log file stream
 std::ofstream debugLogFile;
 
@@ -238,6 +242,7 @@ double ApplyOperator(double a, double b, char op);
 double EvaluateExpression(const std::string& expression);
 void SwitchTheme();
 void ApplyTheme(HWND hwnd);
+void CleanupResources();
 std::string FormatExpressionWithPrecedence(const std::string& expr);
 
 // Entry point
@@ -546,60 +551,104 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             break;
         }
         
-        case WM_CTLCOLORBTN: {
-            HDC hdcBtn = (HDC)wParam;
-            HWND hwndBtn = (HWND)lParam;
+        case WM_DRAWITEM: {
+            DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
             
-            // Find which button this is
-            int buttonIndex = -1;
-            for (int i = 0; i < 45; i++) {
-                if (hwndBtn == hWndButtons[i]) {
-                    buttonIndex = i;
-                    break;
-                }
-            }
-            
-            if (buttonIndex >= 0) {
-                // Get corresponding button definition from buttons array
-                // Since we can't access the buttons vector here, use a similar approach
-                COLORREF bgColor = currentTheme->numericButtonBackground; // Default
-                COLORREF txtColor = currentTheme->numericButtonText; // Default
-                
-                // Determine button type from its text
-                wchar_t buttonText[20];
-                GetWindowTextW(hwndBtn, buttonText, sizeof(buttonText)/sizeof(wchar_t));
-                
-                if (wcscmp(buttonText, L"C") == 0) {
-                    bgColor = currentTheme->clearButtonBackground;
-                    txtColor = currentTheme->clearButtonText;
-                } else if (wcscmp(buttonText, L"=") == 0) {
-                    bgColor = currentTheme->equalButtonBackground;
-                    txtColor = currentTheme->equalButtonText;
-                } else if (wcscmp(buttonText, L"+") == 0 || wcscmp(buttonText, L"-") == 0 ||
-                           wcscmp(buttonText, L"x") == 0 || wcscmp(buttonText, L"/") == 0) {
-                    bgColor = currentTheme->operatorButtonBackground;
-                    txtColor = currentTheme->operatorButtonText;
-                } else if (wcscmp(buttonText, L"M+") == 0 || wcscmp(buttonText, L"M-") == 0 ||
-                           wcscmp(buttonText, L"MC") == 0 || wcscmp(buttonText, L"MR") == 0) {
-                    bgColor = currentTheme->memoryButtonBackground;
-                    txtColor = currentTheme->memoryButtonText;
-                } else if (wcscmp(buttonText, L"s") == 0 || wcscmp(buttonText, L"^") == 0 ||
-                          wcscmp(buttonText, L"ln") == 0 || wcscmp(buttonText, L"log") == 0) {
-                    bgColor = currentTheme->specialButtonBackground;
-                    txtColor = currentTheme->specialButtonText;
-                } else if (wcscmp(buttonText, L"Theme") == 0 || wcscmp(buttonText, L"About") == 0) {
-                    // For Theme and About buttons, use utility button colors
-                    if (wcscmp(buttonText, L"Theme") == 0) {
-                        bgColor = RGB(180, 180, 180);
-                    } else {
-                        bgColor = RGB(200, 200, 200);
+            // Check if it's a button
+            if (dis->CtlType == ODT_BUTTON) {
+                // Find which button this is
+                int buttonIndex = -1;
+                for (int i = 0; i < 45; i++) {
+                    if (dis->hwndItem == hWndButtons[i]) {
+                        buttonIndex = i;
+                        break;
                     }
-                    txtColor = currentTheme->utilityButtonText;
                 }
                 
-                SetBkColor(hdcBtn, bgColor);
-                SetTextColor(hdcBtn, txtColor);
-                return (LRESULT)CreateSolidBrush(bgColor);
+                if (buttonIndex >= 0) {
+                    // Get button text
+                    wchar_t buttonText[20];
+                    GetWindowTextW(dis->hwndItem, buttonText, sizeof(buttonText)/sizeof(wchar_t));
+                    
+                    // Determine button type and colors
+                    COLORREF bgColor = currentTheme->numericButtonBackground; // Default
+                    COLORREF txtColor = currentTheme->numericButtonText; // Default
+                    
+                    // Same logic as in the WM_CTLCOLORBTN case
+                    if (wcscmp(buttonText, L"C") == 0) {
+                        bgColor = currentTheme->clearButtonBackground;
+                        txtColor = currentTheme->clearButtonText;
+                    } else if (wcscmp(buttonText, L"=") == 0) {
+                        bgColor = currentTheme->equalButtonBackground;
+                        txtColor = currentTheme->equalButtonText;
+                    } else if (wcscmp(buttonText, L"+") == 0 || wcscmp(buttonText, L"-") == 0 ||
+                               wcscmp(buttonText, L"x") == 0 || wcscmp(buttonText, L"/") == 0 ||
+                               wcscmp(buttonText, L"%") == 0) {
+                        bgColor = currentTheme->operatorButtonBackground;
+                        txtColor = currentTheme->operatorButtonText;
+                    } else if (wcscmp(buttonText, L"M+") == 0 || wcscmp(buttonText, L"M-") == 0 ||
+                               wcscmp(buttonText, L"MC") == 0 || wcscmp(buttonText, L"MR") == 0) {
+                        bgColor = currentTheme->memoryButtonBackground;
+                        txtColor = currentTheme->memoryButtonText;
+                    } else if (wcscmp(buttonText, L"sqrt") == 0 || wcscmp(buttonText, L"^") == 0 ||
+                               wcscmp(buttonText, L"ln") == 0 || wcscmp(buttonText, L"log") == 0 ||
+                               wcscmp(buttonText, L"sin") == 0 || wcscmp(buttonText, L"cos") == 0 ||
+                               wcscmp(buttonText, L"tan") == 0 || wcscmp(buttonText, L"asin") == 0 ||
+                               wcscmp(buttonText, L"acos") == 0 || wcscmp(buttonText, L"atan") == 0 ||
+                               wcscmp(buttonText, L"fact") == 0 || wcscmp(buttonText, L"abs") == 0 ||
+                               wcscmp(buttonText, L"UNDO") == 0 || wcscmp(buttonText, L"pi") == 0 ||
+                               wcscmp(buttonText, L"e") == 0 || wcscmp(buttonText, L"(") == 0 ||
+                               wcscmp(buttonText, L")") == 0) {
+                        bgColor = currentTheme->specialButtonBackground;
+                        txtColor = currentTheme->specialButtonText;
+                    } else if (wcscmp(buttonText, L"Theme") == 0) {
+                        bgColor = currentTheme->specialButtonBackground;
+                        txtColor = currentTheme->utilityButtonText;
+                    } else if (wcscmp(buttonText, L"About") == 0) {
+                        bgColor = currentTheme->specialButtonBackground;
+                        txtColor = currentTheme->utilityButtonText;
+                    } else if (wcscmp(buttonText, L"DEL") == 0) {
+                        bgColor = currentTheme->clearButtonBackground;
+                        txtColor = currentTheme->clearButtonText;
+                    }
+                    
+                    // Create button background brush
+                    HBRUSH hBrush = CreateSolidBrush(bgColor);
+                    
+                    // Draw button background
+                    FillRect(dis->hDC, &dis->rcItem, hBrush);
+                    DeleteObject(hBrush); // Clean up brush immediately
+                    
+                    // Draw button frame
+                    if (dis->itemState & ODS_SELECTED) {
+                        // Button is pressed, draw a sunken edge
+                        DrawEdge(dis->hDC, &dis->rcItem, EDGE_SUNKEN, BF_RECT);
+                    } else {
+                        // Button is not pressed, draw a raised edge
+                        DrawEdge(dis->hDC, &dis->rcItem, EDGE_RAISED, BF_RECT);
+                    }
+                    
+                    // Set text color and draw button text
+                    SetBkMode(dis->hDC, TRANSPARENT);
+                    SetTextColor(dis->hDC, txtColor);
+                    
+                    // Calculate text position to center it
+                    RECT textRect = dis->rcItem;
+                    DrawTextW(dis->hDC, buttonText, -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    
+                    // Draw focus rectangle if button has focus
+                    if (dis->itemState & ODS_FOCUS) {
+                        // Adjust rectangle to be smaller than the button for a better look
+                        RECT focusRect = dis->rcItem;
+                        focusRect.left += 3;
+                        focusRect.top += 3;
+                        focusRect.right -= 3;
+                        focusRect.bottom -= 3;
+                        DrawFocusRect(dis->hDC, &focusRect);
+                    }
+                    
+                    return TRUE;
+                }
             }
             break;
         }
@@ -622,10 +671,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         
         case WM_DESTROY:
             logDebug("WM_DESTROY received, closing application", "MAIN");
+            CleanupResources(); // Add this line to clean up resources
             closeDebugLog();
             PostQuitMessage(0);
             return 0;
             
+        case WM_CTLCOLORBTN: {
+            // This handler is still needed for non-owner-drawn buttons
+            HDC hdcBtn = (HDC)wParam;
+            HWND hwndBtn = (HWND)lParam;
+            
+            // Default background for standard buttons
+            return (LRESULT)GetStockObject(NULL_BRUSH);
+        }
+        
         default:
             return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
@@ -691,10 +750,10 @@ void CreateCalculatorUI(HWND hwnd) {
         {L"log", 20, 550, 60, 40, currentTheme->specialButtonBackground},
         {L"fact", 90, 550, 60, 40, currentTheme->specialButtonBackground},
         {L"abs", 160, 550, 60, 40, currentTheme->specialButtonBackground},
-        {L"Theme", 230, 550, 80, 40, RGB(180, 180, 180)},
+        {L"Theme", 230, 550, 80, 40, currentTheme->specialButtonBackground}, // Use theme color instead of hardcoded
         
         // Row 10
-        {L"About", 20, 600, 80, 40, RGB(200, 200, 200)},
+        {L"About", 20, 600, 80, 40, currentTheme->specialButtonBackground}, // Use theme color instead of hardcoded
         {L"DEL", 110, 600, 80, 40, currentTheme->clearButtonBackground},
         {L"UNDO", 200, 600, 80, 40, currentTheme->specialButtonBackground}
     };
@@ -750,7 +809,7 @@ void CreateCalculatorUI(HWND hwnd) {
         const ButtonDef& btn = buttons[i];
         HWND hButton = CreateWindowExW(
             0, L"BUTTON", btn.label,
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, // Changed from BS_PUSHBUTTON to BS_OWNERDRAW
             btn.x, btn.y, btn.width, btn.height,
             hwnd, (HMENU)(1000 + i), NULL, NULL
         );
@@ -763,10 +822,6 @@ void CreateCalculatorUI(HWND hwnd) {
                                   DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                                   CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         SendMessage(hButton, WM_SETFONT, (WPARAM)hBtnFont, TRUE);
-        
-        // Set button color
-        // This is done using owner-drawn buttons with WM_CTLCOLORBTN
-        SendMessage(hButton, WM_CTLCOLORBTN, 0, (LPARAM)btn.bgColor);
     }
 }
 
@@ -2048,6 +2103,22 @@ void SwitchTheme() {
     currentThemeIndex = (currentThemeIndex + 1) % availableThemes.size();
     currentTheme = &availableThemes[currentThemeIndex];
     
+    // Clean up existing brushes to prevent memory leaks
+    if (themeBackgroundBrush != NULL) {
+        DeleteObject(themeBackgroundBrush);
+        themeBackgroundBrush = NULL;
+    }
+    
+    for (int i = 0; i < 10; i++) {
+        if (buttonBrushes[i] != NULL) {
+            DeleteObject(buttonBrushes[i]);
+            buttonBrushes[i] = NULL;
+        }
+    }
+    
+    // Create new background brush
+    themeBackgroundBrush = CreateSolidBrush(currentTheme->windowBackground);
+    
     // Show theme change message
     std::string themeName = WStringToString(currentTheme->name);
     logDebug("Theme changed to: " + themeName, "UI");
@@ -2055,23 +2126,45 @@ void SwitchTheme() {
 
 // Function to apply the current theme to all UI elements
 void ApplyTheme(HWND hwnd) {
-    // Recreate the UI with the new theme
-    // First, destroy all child windows
-    EnumChildWindows(hwnd, [](HWND hwndChild, LPARAM lParam) -> BOOL {
-        DestroyWindow(hwndChild);
-        return TRUE;
-    }, 0);
+    // Set window background color using the cached brush
+    SetClassLongPtr(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)themeBackgroundBrush);
     
-    // Recreate the UI
-    CreateCalculatorUI(hwnd);
+    // Update display colors
+    SendMessage(hWndDisplay, EM_SETBKGNDCOLOR, 0, currentTheme->displayBackground);
+    
+    // Update history colors
+    SendMessage(hWndHistoryList, EM_SETBKGNDCOLOR, 0, currentTheme->historyBackground);
+    
+    // Force redraw of all buttons to apply new theme colors
+    for (int i = 0; i < 45; i++) {
+        if (hWndButtons[i] != NULL) {
+            InvalidateRect(hWndButtons[i], NULL, TRUE);
+        }
+    }
+    
+    // Force redraw of the entire window
+    InvalidateRect(hwnd, NULL, TRUE);
+    UpdateWindow(hwnd);
     
     // Refresh the memory indicator and history
     UpdateMemoryIndicator();
     UpdateHistoryDisplay();
+}
+
+// Add a destructor function to clean up resources when the app closes
+void CleanupResources() {
+    // Clean up brushes
+    if (themeBackgroundBrush != NULL) {
+        DeleteObject(themeBackgroundBrush);
+        themeBackgroundBrush = NULL;
+    }
     
-    // Force repaint
-    InvalidateRect(hwnd, NULL, TRUE);
-    UpdateWindow(hwnd);
+    for (int i = 0; i < 10; i++) {
+        if (buttonBrushes[i] != NULL) {
+            DeleteObject(buttonBrushes[i]);
+            buttonBrushes[i] = NULL;
+        }
+    }
 }
 
 // Helper function to check if a string is a valid identifier
