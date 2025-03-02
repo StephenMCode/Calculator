@@ -16,6 +16,20 @@ A comprehensive calculator application written in C++ with a graphical user inte
   - Logarithm with custom base (log)
   - Natural Logarithm (ln)
 
+- Advanced expression parsing:
+  - Support for complex mathematical expressions
+  - Proper operator precedence handling
+  - Nested parentheses support
+  - Function arguments can contain full expressions
+  - Visual indicators for unclosed parentheses
+  - Automatic parentheses completion
+
+- Trigonometric functions:
+  - Sine (sin)
+  - Cosine (cos)
+  - Tangent (tan)
+  - Inverse trigonometric functions (asin, acos, atan)
+
 - Memory functions:
   - Memory Add (M+)
   - Memory Subtract (M-)
@@ -131,10 +145,17 @@ The calculator supports keyboard input for all operations, making it faster and 
 
 ### Example Operations
 
-- Square Root: s(25) = 5
+- Basic arithmetic: 5+5 = 10
+- Order of operations: 2+3*4 = 14 (multiplication before addition)
+- Parentheses: (2+3)*4 = 20 (changes precedence)
+- Square Root: sqrt(25) = 5
 - Power: 2^3 = 8
-- Logarithm: log_10(100) = 2
+- Logarithm: log(100) = 2
 - Natural Logarithm: ln(2.71828) ≈ 1
+- Complex expressions: sin(45)*cos(30)+tan(15) 
+- Nested functions: log(sqrt(16)) = 0.602
+- Function with expressions: cos(8*3) = -0.911
+- Mixed operations: 5^2 + sqrt(16) - ln(10) = 25 + 4 - 2.302 = 26.698
 
 ### Memory Operations
 

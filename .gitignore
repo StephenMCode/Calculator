@@ -60,3 +60,7 @@ Makefile
 # OS specific files
 .DS_Store
 Thumbs.db 
+
+# Log files
+calculator_debug.log
+*.log 

@@ -12,6 +12,9 @@
 #include <cmath>
 #include <algorithm> // For std::min
 #include "calculator.h"
+#include <fstream>
+#include <iomanip>  // For std::setprecision, etc.
+#include <ctime>    // For time logging
 
 // Add missing control messages
 #ifndef EM_SETBKGNDCOLOR
@@ -116,6 +119,69 @@ std::vector<ThemeColors> availableThemes = {
 int currentThemeIndex = 0;
 ThemeColors* currentTheme = &availableThemes[currentThemeIndex];
 
+// Global debug log file stream
+std::ofstream debugLogFile;
+
+// Debug logging functions
+void initDebugLog() {
+    // Clear and open the log file
+    debugLogFile.open("calculator_debug.log", std::ios::out | std::ios::trunc);
+    
+    // Log header with timestamp
+    time_t now = time(0);
+    char timeStr[26];
+    ctime_s(timeStr, sizeof(timeStr), &now);
+    
+    debugLogFile << "------------------------------------------------------------------------------" << std::endl;
+    debugLogFile << "Calculator Debug Log - Started: " << timeStr;
+    debugLogFile << "------------------------------------------------------------------------------" << std::endl;
+    debugLogFile << "Build version: " << __DATE__ << " " << __TIME__ << std::endl;
+    debugLogFile << std::endl;
+    
+    // Configure stream formatting
+    debugLogFile << std::fixed << std::setprecision(6);
+    
+    // Flush to ensure header is written immediately
+    debugLogFile.flush();
+}
+
+void closeDebugLog() {
+    if (debugLogFile.is_open()) {
+        // Log footer with timestamp
+        time_t now = time(0);
+        char timeStr[26];
+        ctime_s(timeStr, sizeof(timeStr), &now);
+        
+        debugLogFile << std::endl;
+        debugLogFile << "------------------------------------------------------------------------------" << std::endl;
+        debugLogFile << "Calculator Debug Log - Ended: " << timeStr;
+        debugLogFile << "------------------------------------------------------------------------------" << std::endl;
+        
+        // Close the file
+        debugLogFile.close();
+    }
+}
+
+// Helper function to log with timestamp
+void logDebug(const std::string& message, const std::string& category = "INFO") {
+    if (debugLogFile.is_open()) {
+        // Get current time
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        
+        // Format: [HH:MM:SS.mmm] [CATEGORY] Message
+        debugLogFile << "[" 
+                   << std::setw(2) << std::setfill('0') << st.wHour << ":"
+                   << std::setw(2) << std::setfill('0') << st.wMinute << ":" 
+                   << std::setw(2) << std::setfill('0') << st.wSecond << "." 
+                   << std::setw(3) << std::setfill('0') << st.wMilliseconds << "] "
+                   << "[" << category << "] " << message << std::endl;
+        
+        // Flush to ensure message is written immediately
+        debugLogFile.flush();
+    }
+}
+
 // Helper function to convert std::string to std::wstring
 std::wstring StringToWString(const std::string& str) {
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
@@ -133,12 +199,13 @@ HWND hWndMain;                  // Main window handle
 HWND hWndDisplay;               // Display field
 HWND hWndMemoryIndicator;       // Memory indicator field
 HWND hWndHistoryList;           // History list box
-HWND hWndButtons[29];           // Button handles (increased for memory buttons)
+HWND hWndButtons[45];           // Button handles (increased for additional function buttons)
 Calculator calculator;          // Calculator instance
 std::string currentExpression = "0";  // Current expression string
+std::string previousExpression = "0"; // For undo functionality
 bool newExpression = true;      // Flag for new expression
 double memoryValue = 0.0;       // Memory storage value
-bool memoryHasValue = false;    // Flag indicating if memory has a value
+bool memoryUsed = false;        // Flag indicating if memory has a value
 std::vector<std::string> calculationHistory; // History of calculations
 
 // Button definitions
@@ -171,9 +238,14 @@ double ApplyOperator(double a, double b, char op);
 double EvaluateExpression(const std::string& expression);
 void SwitchTheme();
 void ApplyTheme(HWND hwnd);
+std::string FormatExpressionWithPrecedence(const std::string& expr);
 
 // Entry point
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Initialize debug log
+    initDebugLog();
+    logDebug("Application started", "MAIN");
+    
     // Register the window class
     const wchar_t CLASS_NAME[] = L"CalculatorWindowClass";
     
@@ -187,15 +259,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     RegisterClassW(&wc);
     
+    // Calculate screen dimensions for centering
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    
+    // Window dimensions
+    int windowWidth = 520;   // Increased width to accommodate history display better
+    int windowHeight = 680;  // Increased height to accommodate all buttons
+    
+    // Calculate window position to center on screen
+    int windowX = (screenWidth - windowWidth) / 2;
+    int windowY = (screenHeight - windowHeight) / 2;
+    
     // Create the window
     hWndMain = CreateWindowExW(
         0,                          // Optional window styles
         CLASS_NAME,                 // Window class
-        L"C++ Calculator",           // Window text
+        L"Advanced C++ Calculator",  // Updated window title
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, // Window style
         
-        // Size and position
-        CW_USEDEFAULT, CW_USEDEFAULT, 500, 550, // Increased width for history display
+        // Size and position (centered on screen)
+        windowX, windowY, windowWidth, windowHeight,
         
         NULL,       // Parent window    
         NULL,       // Menu
@@ -227,6 +311,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
     
+    // Before returning, close the debug log
+    logDebug("Application ending", "MAIN");
+    closeDebugLog();
     return 0;
 }
 
@@ -341,6 +428,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 return 0;
             }
             
+            // Check for percent key
+            if (keyCode == '%' || (keyCode == '5' && shiftPressed)) {
+                HandleButtonClick(L"%");
+                return 0;
+            }
+            
             // Handle Enter key for calculation
             if (keyCode == VK_RETURN) {
                 HandleButtonClick(L"=");
@@ -353,9 +446,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 return 0;
             }
             
+            // Handle backspace for delete
+            if (keyCode == VK_BACK) {
+                HandleButtonClick(L"DEL");
+                return 0;
+            }
+            
             // Handle special operations
             if (keyCode == 'S' || keyCode == 's') {  // Square root
-                HandleButtonClick(L"s");
+                HandleButtonClick(L"sqrt");
                 return 0;
             }
             
@@ -410,23 +509,41 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_COMMAND: {
             int buttonId = LOWORD(wParam);
             
+            // Log button clicks for debugging
+            std::string debugMsg = "WM_COMMAND received, buttonId: " + std::to_string(buttonId);
+            logDebug(debugMsg, "UI");
+            
             // Handle button clicks
-            if (buttonId >= 1000 && buttonId < 1029) {
+            if (buttonId >= 1000 && buttonId <= 1050) {
+                // Get the button text
                 HWND buttonHwnd = (HWND)lParam;
-                wchar_t buttonText[20];
-                GetWindowTextW(buttonHwnd, buttonText, sizeof(buttonText)/sizeof(wchar_t));
+                wchar_t buttonText[50];
+                GetWindowTextW(buttonHwnd, buttonText, 50);
                 
-                // Check if it's a special button
-                if (wcscmp(buttonText, L"About") == 0) {
-                    ShowAboutDialog(hwnd);
-                } else if (wcscmp(buttonText, L"Theme") == 0) {
+                std::string narrowBtnText = WStringToString(buttonText);
+                std::string btnClickMsg = "Button clicked in WindowProc: " + narrowBtnText;
+                logDebug(btnClickMsg, "UI");
+                
+                // Special handling for theme button
+                if (wcscmp(buttonText, L"THEME") == 0) {
+                    logDebug("Theme button detected in WindowProc", "UI");
                     SwitchTheme();
-                    ApplyTheme(hwnd);
-                } else {
-                    HandleButtonClick(buttonText);
+                    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE);
+                    return 0;
                 }
+                
+                // Special handling for UNDO button
+                if (wcscmp(buttonText, L"UNDO") == 0) {
+                    logDebug("UNDO button detected in WindowProc", "UI");
+                    HandleButtonClick(buttonText);
+                    return 0;
+                }
+                
+                // Regular button handling
+                logDebug("Regular button detected in WindowProc", "UI");
+                HandleButtonClick(buttonText);
             }
-            return 0;
+            break;
         }
         
         case WM_CTLCOLORBTN: {
@@ -435,7 +552,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             
             // Find which button this is
             int buttonIndex = -1;
-            for (int i = 0; i < 29; i++) {
+            for (int i = 0; i < 45; i++) {
                 if (hwndBtn == hWndButtons[i]) {
                     buttonIndex = i;
                     break;
@@ -504,6 +621,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         
         case WM_DESTROY:
+            logDebug("WM_DESTROY received, closing application", "MAIN");
+            closeDebugLog();
             PostQuitMessage(0);
             return 0;
             
@@ -517,46 +636,67 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 void CreateCalculatorUI(HWND hwnd) {
     // Define button layout using current theme colors
     std::vector<ButtonDef> buttons = {
-        // Row 1
-        {L"C", 20, 100, 60, 50, currentTheme->clearButtonBackground},
-        {L"s", 90, 100, 60, 50, currentTheme->specialButtonBackground},
-        {L"^", 160, 100, 60, 50, currentTheme->specialButtonBackground},
-        {L"/", 230, 100, 60, 50, currentTheme->operatorButtonBackground},
+        // Row 1 (Function row 1)
+        {L"sin", 20, 100, 50, 40, currentTheme->specialButtonBackground},
+        {L"cos", 80, 100, 50, 40, currentTheme->specialButtonBackground},
+        {L"tan", 140, 100, 50, 40, currentTheme->specialButtonBackground},
+        {L"pi", 200, 100, 40, 40, currentTheme->specialButtonBackground},
+        {L"e", 250, 100, 40, 40, currentTheme->specialButtonBackground},
         
-        // Row 2
-        {L"7", 20, 160, 60, 50, currentTheme->numericButtonBackground},
-        {L"8", 90, 160, 60, 50, currentTheme->numericButtonBackground},
-        {L"9", 160, 160, 60, 50, currentTheme->numericButtonBackground},
-        {L"x", 230, 160, 60, 50, currentTheme->operatorButtonBackground},
+        // Row 2 (Function row 2)
+        {L"asin", 20, 150, 50, 40, currentTheme->specialButtonBackground},
+        {L"acos", 80, 150, 50, 40, currentTheme->specialButtonBackground},
+        {L"atan", 140, 150, 50, 40, currentTheme->specialButtonBackground},
+        {L"(", 200, 150, 40, 40, currentTheme->operatorButtonBackground},
+        {L")", 250, 150, 40, 40, currentTheme->operatorButtonBackground},
         
         // Row 3
-        {L"4", 20, 220, 60, 50, currentTheme->numericButtonBackground},
-        {L"5", 90, 220, 60, 50, currentTheme->numericButtonBackground},
-        {L"6", 160, 220, 60, 50, currentTheme->numericButtonBackground},
-        {L"-", 230, 220, 60, 50, currentTheme->operatorButtonBackground},
+        {L"C", 20, 200, 60, 50, currentTheme->clearButtonBackground},
+        {L"sqrt", 90, 200, 60, 50, currentTheme->specialButtonBackground},
+        {L"^", 160, 200, 60, 50, currentTheme->specialButtonBackground},
+        {L"/", 230, 200, 60, 50, currentTheme->operatorButtonBackground},
         
         // Row 4
-        {L"1", 20, 280, 60, 50, currentTheme->numericButtonBackground},
-        {L"2", 90, 280, 60, 50, currentTheme->numericButtonBackground},
-        {L"3", 160, 280, 60, 50, currentTheme->numericButtonBackground},
-        {L"+", 230, 280, 60, 50, currentTheme->operatorButtonBackground},
+        {L"7", 20, 260, 60, 50, currentTheme->numericButtonBackground},
+        {L"8", 90, 260, 60, 50, currentTheme->numericButtonBackground},
+        {L"9", 160, 260, 60, 50, currentTheme->numericButtonBackground},
+        {L"x", 230, 260, 60, 50, currentTheme->operatorButtonBackground},
         
         // Row 5
-        {L"0", 20, 340, 60, 50, currentTheme->numericButtonBackground},
-        {L".", 90, 340, 60, 50, currentTheme->numericButtonBackground},
-        {L"ln", 160, 340, 60, 50, currentTheme->specialButtonBackground},
-        {L"=", 230, 340, 60, 50, currentTheme->equalButtonBackground},
+        {L"4", 20, 320, 60, 50, currentTheme->numericButtonBackground},
+        {L"5", 90, 320, 60, 50, currentTheme->numericButtonBackground},
+        {L"6", 160, 320, 60, 50, currentTheme->numericButtonBackground},
+        {L"-", 230, 320, 60, 50, currentTheme->operatorButtonBackground},
         
-        // Row 6 (new row for log, About, and Theme)
-        {L"log", 20, 400, 90, 40, currentTheme->specialButtonBackground},
-        {L"About", 120, 400, 80, 40, RGB(200, 200, 200)},
-        {L"Theme", 210, 400, 80, 40, RGB(180, 180, 180)},
+        // Row 6
+        {L"1", 20, 380, 60, 50, currentTheme->numericButtonBackground},
+        {L"2", 90, 380, 60, 50, currentTheme->numericButtonBackground},
+        {L"3", 160, 380, 60, 50, currentTheme->numericButtonBackground},
+        {L"+", 230, 380, 60, 50, currentTheme->operatorButtonBackground},
         
-        // Row 7 (memory buttons)
-        {L"M+", 20, 450, 60, 50, currentTheme->memoryButtonBackground},
-        {L"M-", 90, 450, 60, 50, currentTheme->memoryButtonBackground},
-        {L"MR", 160, 450, 60, 50, currentTheme->numericButtonBackground},
-        {L"MC", 230, 450, 60, 50, currentTheme->memoryButtonBackground}
+        // Row 7
+        {L"0", 20, 440, 60, 50, currentTheme->numericButtonBackground},
+        {L".", 90, 440, 60, 50, currentTheme->numericButtonBackground},
+        {L"%", 160, 440, 60, 50, currentTheme->operatorButtonBackground},
+        {L"=", 230, 440, 60, 50, currentTheme->equalButtonBackground},
+        
+        // Row 8 (Memory and functions)
+        {L"M+", 20, 500, 50, 40, currentTheme->memoryButtonBackground},
+        {L"M-", 80, 500, 50, 40, currentTheme->memoryButtonBackground},
+        {L"MR", 140, 500, 50, 40, currentTheme->memoryButtonBackground},
+        {L"MC", 200, 500, 50, 40, currentTheme->memoryButtonBackground},
+        {L"ln", 260, 500, 50, 40, currentTheme->specialButtonBackground},
+        
+        // Row 9 (Utility)
+        {L"log", 20, 550, 60, 40, currentTheme->specialButtonBackground},
+        {L"fact", 90, 550, 60, 40, currentTheme->specialButtonBackground},
+        {L"abs", 160, 550, 60, 40, currentTheme->specialButtonBackground},
+        {L"Theme", 230, 550, 80, 40, RGB(180, 180, 180)},
+        
+        // Row 10
+        {L"About", 20, 600, 80, 40, RGB(200, 200, 200)},
+        {L"DEL", 110, 600, 80, 40, currentTheme->clearButtonBackground},
+        {L"UNDO", 200, 600, 80, 40, currentTheme->specialButtonBackground}
     };
     
     // Set window background color
@@ -566,7 +706,7 @@ void CreateCalculatorUI(HWND hwnd) {
     hWndMemoryIndicator = CreateWindowExW(
         0, L"STATIC", L"",
         WS_CHILD | WS_VISIBLE | SS_CENTER,
-        290, 20, 20, 25,
+        300, 20, 20, 25,
         hwnd, (HMENU)997, NULL, NULL
     );
     
@@ -574,7 +714,7 @@ void CreateCalculatorUI(HWND hwnd) {
     hWndDisplay = CreateWindowExW(
         0, L"EDIT", L"0",
         WS_CHILD | WS_VISIBLE | ES_RIGHT | ES_READONLY,
-        20, 20, 270, 50,
+        20, 20, 280, 60,  // Increased height and width
         hwnd, (HMENU)999, NULL, NULL
     );
     
@@ -586,7 +726,7 @@ void CreateCalculatorUI(HWND hwnd) {
     hWndHistoryList = CreateWindowExW(
         0, L"EDIT", L"",
         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
-        320, 20, 160, 480,
+        320, 20, 160, 620,
         hwnd, (HMENU)996, NULL, NULL
     );
     
@@ -599,8 +739,8 @@ void CreateCalculatorUI(HWND hwnd) {
                           CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SendMessage(hWndHistoryList, WM_SETFONT, (WPARAM)hHistoryFont, TRUE);
     
-    // Set display fonts
-    HFONT hFont = CreateFontW(28, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    // Set display fonts - increased font size
+    HFONT hFont = CreateFontW(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SendMessage(hWndDisplay, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -632,20 +772,242 @@ void CreateCalculatorUI(HWND hwnd) {
 
 // Handle button clicks
 void HandleButtonClick(const wchar_t* buttonText) {
-    // Convert wide string to narrow string for processing
-    std::string narrowButtonText = WStringToString(buttonText);
-    const char* buttonTextChar = narrowButtonText.c_str();
+    std::string narrowBtnText = WStringToString(buttonText);
+    std::string debugMsg = "HandleButtonClick called with button: " + narrowBtnText;
+    logDebug(debugMsg, "UI");
+    
+    // Special handling for equals button
+    if (wcscmp(buttonText, L"=") == 0) {
+        logDebug("Equals button detected, calling CalculateExpression()", "CALC");
+        std::string debugExpr = "Current expression before calculation: " + currentExpression;
+        logDebug(debugExpr, "CALC");
+        CalculateExpression();
+        return;
+    }
+    
+    // Check for constants
+    if (wcscmp(buttonText, L"pi") == 0) {
+        if (newExpression) {
+            currentExpression = "pi";
+            newExpression = false;
+        } else if (currentExpression == "0") {
+            currentExpression = "pi";
+        } else {
+            // Handle adding pi after operators
+            char lastChar = currentExpression.back();
+            if (IsOperator(lastChar) || lastChar == '(') {
+                currentExpression += "pi";
+            } else {
+                // Otherwise we're multiplying
+                currentExpression += "*pi";
+            }
+        }
+        UpdateDisplay(currentExpression);
+        return;
+    }
+    
+    if (wcscmp(buttonText, L"e") == 0) {
+        if (newExpression) {
+            currentExpression = "e";
+            newExpression = false;
+        } else if (currentExpression == "0") {
+            currentExpression = "e";
+        } else {
+            // Handle adding e after operators
+            char lastChar = currentExpression.back();
+            if (IsOperator(lastChar) || lastChar == '(') {
+                currentExpression += "e";
+            } else {
+                // Otherwise we're multiplying
+                currentExpression += "*e";
+            }
+        }
+        UpdateDisplay(currentExpression);
+        return;
+    }
+    
+    // Handle parentheses
+    if (wcscmp(buttonText, L"(") == 0) {
+        if (newExpression) {
+            currentExpression = "(";
+            newExpression = false;
+        } else if (currentExpression == "0") {
+            currentExpression = "(";
+        } else {
+            // Handle adding opening parenthesis after operators or another opening parenthesis
+            char lastChar = currentExpression.back();
+            if (IsOperator(lastChar) || lastChar == '(') {
+                currentExpression += "(";
+            } else {
+                // Otherwise we're multiplying
+                currentExpression += "*(";
+            }
+        }
+        UpdateDisplay(currentExpression);
+        return;
+    }
+    
+    if (wcscmp(buttonText, L")") == 0) {
+        // Only add closing parenthesis if there's an opening one
+        int openCount = 0, closeCount = 0;
+        for (char c : currentExpression) {
+            if (c == '(') openCount++;
+            if (c == ')') closeCount++;
+        }
+        if (openCount > closeCount) {
+            currentExpression += ")";
+            UpdateDisplay(currentExpression);
+        }
+        return;
+    }
+    
+    // Handle trigonometric and other functions
+    if (wcscmp(buttonText, L"sin") == 0 || wcscmp(buttonText, L"cos") == 0 || 
+        wcscmp(buttonText, L"tan") == 0 || wcscmp(buttonText, L"asin") == 0 || 
+        wcscmp(buttonText, L"acos") == 0 || wcscmp(buttonText, L"atan") == 0 ||
+        wcscmp(buttonText, L"sinh") == 0 || wcscmp(buttonText, L"cosh") == 0 || 
+        wcscmp(buttonText, L"tanh") == 0 || wcscmp(buttonText, L"abs") == 0 ||
+        wcscmp(buttonText, L"fact") == 0) {
+        
+        logDebug("Function button clicked: " + narrowBtnText, "UI");
+        
+        if (newExpression || currentExpression == "0") {
+            currentExpression = narrowBtnText + "(";
+            newExpression = false;
+        } else {
+            // Handle adding function after operators
+            char lastChar = currentExpression.back();
+            if (IsOperator(lastChar) || lastChar == '(') {
+                currentExpression += narrowBtnText + "(";
+            } else {
+                // Otherwise we're multiplying
+                currentExpression += "*" + narrowBtnText + "(";
+            }
+        }
+        
+        // Count unclosed parentheses for debugging
+        int openCount = 0, closeCount = 0;
+        for (char c : currentExpression) {
+            if (c == '(') openCount++;
+            if (c == ')') closeCount++;
+        }
+        if (openCount > closeCount) {
+            logDebug("Detected " + std::to_string(openCount - closeCount) + " unclosed parentheses", "UI");
+        }
+        
+        UpdateDisplay(currentExpression);
+        return;
+    }
+    
+    // Handle sqrt button
+    if (wcscmp(buttonText, L"sqrt") == 0) {
+        logDebug("Square root function clicked: sqrt", "UI");
+        
+        if (newExpression || currentExpression == "0") {
+            currentExpression = "sqrt(";
+            newExpression = false;
+        } else {
+            // Handle adding function after operators
+            char lastChar = currentExpression.back();
+            if (IsOperator(lastChar) || lastChar == '(') {
+                currentExpression += "sqrt(";
+            } else {
+                // Otherwise we're multiplying
+                currentExpression += "*sqrt(";
+            }
+        }
+        
+        // Count unclosed parentheses for debugging
+        int openCount = 0, closeCount = 0;
+        for (char c : currentExpression) {
+            if (c == '(') openCount++;
+            if (c == ')') closeCount++;
+        }
+        if (openCount > closeCount) {
+            logDebug("Detected " + std::to_string(openCount - closeCount) + " unclosed parentheses", "UI");
+        }
+        
+        UpdateDisplay(currentExpression);
+        return;
+    }
+    
+    // Handle delete button
+    if (wcscmp(buttonText, L"DEL") == 0) {
+        if (currentExpression.length() > 0 && !newExpression && currentExpression != "0") {
+            // Save the current expression for undo
+            previousExpression = currentExpression;
+            logDebug("Saved expression for undo: " + previousExpression, "UI");
+            
+            // Enhanced delete functionality to handle semantic units
+            std::string debugMsg = "DEL button pressed, current expression: " + currentExpression;
+            logDebug(debugMsg, "UI");
+            
+            // Check if we're deleting a function call
+            std::vector<std::string> functions = {"sin", "cos", "tan", "asin", "acos", "atan", 
+                                                "sinh", "cosh", "tanh", "sqrt", "log", "ln",
+                                                "abs", "fact"};
+            
+            bool deletedFunction = false;
+            for (const std::string& func : functions) {
+                // Check if expression ends with function name and opening parenthesis
+                if (currentExpression.length() >= func.length() + 1 && 
+                    currentExpression.substr(currentExpression.length() - (func.length() + 1)) == func + "(") {
+                    // Delete the entire function call
+                    currentExpression.erase(currentExpression.length() - (func.length() + 1));
+                    deletedFunction = true;
+                    logDebug("Deleted function: " + func + "(", "UI");
+                    break;
+                }
+            }
+            
+            // If no function was deleted, check for other semantic units
+            if (!deletedFunction) {
+                // Check for constants (pi, e)
+                if (currentExpression.length() >= 2 && currentExpression.substr(currentExpression.length() - 2) == "pi") {
+                    currentExpression.erase(currentExpression.length() - 2);
+                    logDebug("Deleted constant: pi", "UI");
+                } else if (currentExpression.length() >= 1 && currentExpression.back() == 'e') {
+                    currentExpression.pop_back();
+                    logDebug("Deleted constant: e", "UI");
+                } else {
+                    // Default behavior: delete one character
+                    currentExpression.pop_back();
+                    logDebug("Deleted single character", "UI");
+                }
+            }
+            
+            if (currentExpression.empty()) {
+                currentExpression = "0";
+            }
+            UpdateDisplay(currentExpression);
+        }
+        return;
+    }
+    
+    // Handle undo button (CTRL+Z)
+    if (wcscmp(buttonText, L"UNDO") == 0 || wcscmp(buttonText, L"Ctrl+Z") == 0) {
+        if (previousExpression != "0") {
+            // Swap current and previous expressions
+            std::string temp = currentExpression;
+            currentExpression = previousExpression;
+            previousExpression = temp;
+            
+            logDebug("Undo performed, restored: " + currentExpression, "UI");
+            UpdateDisplay(currentExpression);
+        }
+        return;
+    }
     
     // Handle numeric buttons and decimal point
-    if (isdigit(buttonTextChar[0]) || (buttonTextChar[0] == '.' && buttonTextChar[1] == '\0')) {
+    if (isdigit(narrowBtnText[0]) || (narrowBtnText[0] == '.' && narrowBtnText[1] == '\0')) {
         if (newExpression) {
-            currentExpression = buttonTextChar;
+            currentExpression = narrowBtnText;
             newExpression = false;
         } else {
             // Don't allow multiple decimal points in a number
-            if (buttonTextChar[0] == '.') {
+            if (narrowBtnText[0] == '.') {
                 // Check if the last number already has a decimal point
-                size_t lastOpPos = currentExpression.find_last_of("+-*/^");
+                size_t lastOpPos = currentExpression.find_last_of("+-*/^%()");
                 if (lastOpPos == std::string::npos) {
                     lastOpPos = 0;
                 } else {
@@ -654,163 +1016,182 @@ void HandleButtonClick(const wchar_t* buttonText) {
                 
                 std::string lastNumber = currentExpression.substr(lastOpPos);
                 if (lastNumber.find('.') != std::string::npos) {
-                    return; // Already has a decimal point
+                    return; // Don't add another decimal point
                 }
             }
-            
-            // If the current expression is just "0", replace it
-            if (currentExpression == "0") {
-                currentExpression = buttonTextChar;
-            } else {
-                currentExpression += buttonTextChar;
-            }
+            currentExpression += narrowBtnText;
         }
         UpdateDisplay(currentExpression);
-        return;
     }
-    
-    // Handle memory operations
-    if (wcscmp(buttonText, L"M+") == 0) {
-        MemoryAdd();
-        return;
-    }
-    
-    if (wcscmp(buttonText, L"M-") == 0) {
-        MemorySubtract();
-        return;
-    }
-    
-    if (wcscmp(buttonText, L"MR") == 0) {
-        MemoryRecall();
-        return;
-    }
-    
-    if (wcscmp(buttonText, L"MC") == 0) {
-        MemoryClear();
-        return;
-    }
-    
-    // Handle operations
-    switch (buttonTextChar[0]) {
-        case 'C': // Clear
-            ClearCalculator();
-            break;
-            
-        case '+': // Addition
-        case '-': // Subtraction
-            // Allow these operators at the beginning of an expression
-            if (currentExpression == "0") {
-                currentExpression = buttonTextChar;
-            } else {
-                // Check if the last character is an operator, replace it
-                char lastChar = currentExpression.back();
-                if (IsOperator(lastChar)) {
-                    currentExpression.pop_back();
-                }
-                currentExpression += buttonTextChar;
+    // Handle operators (+, -, *, /, ^, %)
+    else if (wcscmp(buttonText, L"+") == 0 || wcscmp(buttonText, L"-") == 0 || 
+             wcscmp(buttonText, L"x") == 0 || wcscmp(buttonText, L"/") == 0 || 
+             wcscmp(buttonText, L"^") == 0 || wcscmp(buttonText, L"%") == 0) {
+        
+        // Don't add operator if expression is empty or ends with an operator
+        if (currentExpression.empty() || currentExpression == "0") {
+            if (wcscmp(buttonText, L"-") == 0) {
+                // Allow negative numbers
+                currentExpression = "-";
+                newExpression = false;
+                UpdateDisplay(currentExpression);
             }
+            return;
+        }
+        
+        // Replace 'x' with '*' for internal representation
+        std::string opStr = narrowBtnText;
+        if (opStr == "x") {
+            opStr = "*";
+        }
+        
+        // If the last character is already an operator, replace it
+        char lastChar = currentExpression.back();
+        if (IsOperator(lastChar)) {
+            currentExpression.pop_back();
+            currentExpression += opStr;
+        } else {
+            currentExpression += opStr;
+        }
+        
+        newExpression = false;
+        UpdateDisplay(currentExpression);
+    }
+    else if (wcscmp(buttonText, L"ln") == 0 || wcscmp(buttonText, L"log") == 0) {
+        // Natural logarithm or logarithm
+        std::string funcName;
+        if (wcscmp(buttonText, L"ln") == 0) {
+            funcName = "ln";
+        } else {
+            funcName = "log";
+        }
+        
+        logDebug("Logarithm function clicked: " + funcName, "UI");
+        
+        if (newExpression || currentExpression == "0") {
+            currentExpression = funcName + "(";
             newExpression = false;
-            UpdateDisplay(currentExpression);
-            break;
-            
-        case 'x': // Multiplication
-            // Replace with * for calculation
-            if (currentExpression != "0" && !IsOperator(currentExpression.back())) {
-                currentExpression += "*";
-                newExpression = false;
-                UpdateDisplay(currentExpression);
+        } else {
+            // Handle adding function after operators
+            char lastChar = currentExpression.back();
+            if (IsOperator(lastChar) || lastChar == '(') {
+                currentExpression += funcName + "(";
+            } else {
+                // Otherwise we're multiplying
+                currentExpression += "*" + funcName + "(";
             }
-            break;
-            
-        case '/': // Division
-        case '^': // Power
-            // Don't allow these operators at the beginning of an expression
-            if (currentExpression != "0" && !IsOperator(currentExpression.back())) {
-                currentExpression += buttonTextChar;
-                newExpression = false;
-                UpdateDisplay(currentExpression);
-            }
-            break;
-            
-        case 's': // Square root
-            try {
-                // Calculate the square root of the current expression
-                double expressionValue = EvaluateExpression(currentExpression);
-                double result = calculator.squareRoot(expressionValue);
-                
-                // Set the result as the new expression
-                currentExpression = std::to_string(result);
-                // Remove trailing zeros
-                currentExpression.erase(currentExpression.find_last_not_of('0') + 1, std::string::npos);
-                if (currentExpression.back() == '.') {
-                    currentExpression.pop_back();
-                }
-                
-                UpdateDisplay(currentExpression);
-                newExpression = true;
-            } catch (const std::exception& e) {
-                UpdateDisplay(e.what());
-                newExpression = true;
-            }
-            break;
-            
-        case 'l': // Natural logarithm (ln) or logarithm (log)
-            try {
-                // Calculate the logarithm of the current expression
-                double expressionValue = EvaluateExpression(currentExpression);
-                double result;
-                std::string funcName;
-                
-                if (wcscmp(buttonText, L"ln") == 0) {
-                    result = calculator.naturalLogarithm(expressionValue);
-                    funcName = "ln";
-                } else if (wcscmp(buttonText, L"log") == 0) {
-                    result = calculator.logarithm(expressionValue, 10.0); // Base 10 logarithm
-                    funcName = "log";
-                } else {
-                    break;
-                }
-                
-                // Set the result as the new expression
-                currentExpression = std::to_string(result);
-                // Remove trailing zeros
-                currentExpression.erase(currentExpression.find_last_not_of('0') + 1, std::string::npos);
-                if (currentExpression.back() == '.') {
-                    currentExpression.pop_back();
-                }
-                
-                UpdateDisplay(currentExpression);
-                newExpression = true;
-            } catch (const std::exception& e) {
-                UpdateDisplay(e.what());
-                newExpression = true;
-            }
-            break;
-            
-        case '=': // Calculate result
-            CalculateExpression();
-            break;
+        }
+        
+        // Count unclosed parentheses for debugging
+        int openCount = 0, closeCount = 0;
+        for (char c : currentExpression) {
+            if (c == '(') openCount++;
+            if (c == ')') closeCount++;
+        }
+        if (openCount > closeCount) {
+            logDebug("Detected " + std::to_string(openCount - closeCount) + " unclosed parentheses", "UI");
+        }
+        
+        UpdateDisplay(currentExpression);
+    }
+    else if (wcscmp(buttonText, L"Theme") == 0) {
+        // Theme button
+        logDebug("Theme button clicked, switching theme", "UI");
+        SwitchTheme();
+        ApplyTheme(hWndMain);
+    }
+    else if (wcscmp(buttonText, L"About") == 0) {
+        // About button
+        logDebug("About button clicked, showing dialog", "UI");
+        ShowAboutDialog(hWndMain);
+    }
+    else if (wcscmp(buttonText, L"C") == 0) {
+        // Clear button
+        ClearCalculator();
     }
 }
 
 // Update the display
 void UpdateDisplay(const std::string& text) {
-    // Format the display text
-    std::string displayText = text;
+    // Format the display text with operator precedence visualization
+    std::string displayText = FormatExpressionWithPrecedence(text);
     
-    // Replace "*" with "×" for display
-    size_t pos = 0;
-    while ((pos = displayText.find('*', pos)) != std::string::npos) {
-        displayText.replace(pos, 1, "×");
-        pos += 1; // Length of the replacement character
+    // Check for unbalanced parentheses and add visual indicator
+    int openCount = 0, closeCount = 0;
+    for (char c : displayText) {
+        if (c == '(') openCount++;
+        if (c == ')') closeCount++;
     }
     
-    SetWindowTextW(hWndDisplay, StringToWString(displayText).c_str());
+    // If there are unclosed parentheses, add a visual indicator
+    std::string parenthesesIndicator = "";
+    if (openCount > closeCount) {
+        int missingCount = openCount - closeCount;
+        
+        // Determine if we should show the indicator
+        bool shouldShowIndicator = true;
+        
+        // Common functions that would add an opening parenthesis
+        std::vector<std::string> functions = {"sin", "cos", "tan", "asin", "acos", "atan",
+                                            "sinh", "cosh", "tanh", "sqrt", "log", "ln",
+                                            "abs", "fact"};
+        
+        // Check if we're inside a single function call without nested parentheses
+        if (missingCount == 1) {
+            // Try to find the last opening parenthesis
+            size_t lastOpenParen = displayText.rfind('(');
+            
+            if (lastOpenParen != std::string::npos) {
+                // Check if there's a function name before this parenthesis
+                bool foundFunction = false;
+                
+                for (const std::string& func : functions) {
+                    // Check if there's enough space for the function name
+                    if (lastOpenParen >= func.length() && 
+                        displayText.substr(lastOpenParen - func.length(), func.length()) == func) {
+                        foundFunction = true;
+                        break;
+                    }
+                }
+                
+                // If we found a function and there's only one unclosed parenthesis,
+                // and we're not in a nested expression, suppress the indicator
+                if (foundFunction) {
+                    // Count parentheses before the last opening one to check for nesting
+                    int openBeforeLast = 0, closeBeforeLast = 0;
+                    for (size_t i = 0; i < lastOpenParen; i++) {
+                        if (displayText[i] == '(') openBeforeLast++;
+                        if (displayText[i] == ')') closeBeforeLast++;
+                    }
+                    
+                    // If all previous parentheses are balanced, we're in a simple function call
+                    if (openBeforeLast == closeBeforeLast) {
+                        shouldShowIndicator = false;
+                    }
+                }
+            }
+        }
+        
+        // Show the indicator if we determined it's necessary
+        if (shouldShowIndicator) {
+            parenthesesIndicator = " [" + std::to_string(missingCount) + ")]";
+            logDebug("Detected " + std::to_string(missingCount) + " unclosed parentheses", "UI");
+        }
+    }
+    
+    // Ensure the display text doesn't exceed the display field width
+    // If it's too long, show the last part with an ellipsis at the beginning
+    int maxDisplayLength = 30; // Adjust based on your display width
+    if (displayText.length() > maxDisplayLength) {
+        displayText = "..." + displayText.substr(displayText.length() - maxDisplayLength + 3);
+    }
+    
+    SetWindowTextW(hWndDisplay, StringToWString(displayText + parenthesesIndicator).c_str());
 }
 
 // Update the memory indicator
 void UpdateMemoryIndicator() {
-    if (memoryHasValue) {
+    if (memoryUsed) {
         SetWindowTextW(hWndMemoryIndicator, L"M");
     } else {
         SetWindowTextW(hWndMemoryIndicator, L"");
@@ -840,7 +1221,7 @@ void MemoryAdd() {
     try {
         double expressionValue = EvaluateExpression(currentExpression);
         memoryValue += expressionValue;
-        memoryHasValue = true;
+        memoryUsed = true;
         UpdateMemoryIndicator();
         newExpression = true;
     } catch (...) {
@@ -852,7 +1233,7 @@ void MemorySubtract() {
     try {
         double expressionValue = EvaluateExpression(currentExpression);
         memoryValue -= expressionValue;
-        memoryHasValue = true;
+        memoryUsed = true;
         UpdateMemoryIndicator();
         newExpression = true;
     } catch (...) {
@@ -861,7 +1242,7 @@ void MemorySubtract() {
 }
 
 void MemoryRecall() {
-    if (memoryHasValue) {
+    if (memoryUsed) {
         if (newExpression) {
             currentExpression = std::to_string(memoryValue);
             // Remove trailing zeros
@@ -888,29 +1269,104 @@ void MemoryRecall() {
 
 void MemoryClear() {
     memoryValue = 0.0;
-    memoryHasValue = false;
+    memoryUsed = false;
     UpdateMemoryIndicator();
 }
 
 // Calculate the expression
 void CalculateExpression() {
-    try {
-        // Don't calculate if the expression ends with an operator
-        if (IsOperator(currentExpression.back())) {
-            return;
+    logDebug("CalculateExpression() called", "CALC");
+    
+    // If the expression is empty or just "0", do nothing
+    if (currentExpression.empty() || currentExpression == "0") {
+        logDebug("Expression is empty or just '0', returning without calculation", "CALC");
+        return;
+    }
+    
+    // If the expression ends with an operator, handle it
+    char lastChar = currentExpression.back();
+    std::string debugMsg = "Last character of expression: " + std::string(1, lastChar);
+    logDebug(debugMsg, "CALC");
+    
+    // Special case for percentage at the end
+    if (lastChar == '%') {
+        logDebug("Processing percentage calculation", "CALC");
+        // Assume it's a percentage of the previous result
+        currentExpression = currentExpression.substr(0, currentExpression.length() - 1);
+        double value = EvaluateExpression(currentExpression);
+        value = value / 100.0;
+        
+        // Format the result
+        std::string resultStr = std::to_string(value);
+        // Remove trailing zeros
+        resultStr.erase(resultStr.find_last_not_of('0') + 1, std::string::npos);
+        if (resultStr.back() == '.') {
+            resultStr.pop_back();
         }
         
-        // Store the original expression for history
-        std::string originalExpression = currentExpression;
+        // Add to history
+        std::string historyEntry = currentExpression + "% = " + resultStr;
+        calculationHistory.push_back(historyEntry);
         
-        // Evaluate the expression
-        double result = EvaluateExpression(currentExpression);
+        // Set the result as the new expression
+        currentExpression = resultStr;
+        UpdateDisplay(currentExpression);
+        newExpression = true;
+        return;
+    }
+    
+    // If the expression ends with an operator (except for %), don't calculate
+    if (lastChar == '+' || lastChar == '-' || lastChar == '*' || lastChar == '/') {
+        logDebug("Not calculating due to ending with operator", "CALC");
+        return;
+    }
+    
+    // Check for balanced parentheses and add closing ones if needed
+    logDebug("Checking for matching parentheses", "CALC");
+    int openCount = 0, closeCount = 0;
+    for (char c : currentExpression) {
+        if (c == '(') openCount++;
+        if (c == ')') closeCount++;
+    }
+    
+    // Store the original expression for history
+    std::string originalExpr = currentExpression;
+    
+    // If there are unclosed parentheses, add missing closing parentheses
+    int addedClosingParenthesis = 0;
+    if (openCount > closeCount) {
+        logDebug("Adding missing closing parentheses", "CALC");
+        addedClosingParenthesis = openCount - closeCount;
+        for (int i = 0; i < addedClosingParenthesis; i++) {
+            currentExpression += ")";
+        }
+        // Update the display to show the corrected expression
+        UpdateDisplay(currentExpression);
+        
+        // Log the parentheses addition to debug log only, not to history
+        std::string noteMsg = std::to_string(addedClosingParenthesis) + 
+                             " closing parentheses were added to " + originalExpr;
+        logDebug(noteMsg, "CALC");
+        
+        // Update originalExpr to include the added parentheses
+        originalExpr = currentExpression;
+    }
+    
+    debugMsg = "Starting evaluation of expression: " + originalExpr;
+    logDebug(debugMsg, "CALC");
+    
+    // Evaluate the expression
+    double result;
+    try {
+        result = EvaluateExpression(currentExpression);
+        std::string resultMsg = "Result: " + std::to_string(result) + " (from expression: " + originalExpr + ")";
+        logDebug(resultMsg, "CALC");
         
         // Format the expression for display (replace * with ×)
-        std::string displayExpression = originalExpression;
+        std::string displayExpression = originalExpr;
         size_t pos = 0;
         while ((pos = displayExpression.find('*', pos)) != std::string::npos) {
-            displayExpression.replace(pos, 1, "×");
+            displayExpression.replace(pos, 1, "x");
             pos += 1; // Length of the replacement character
         }
         
@@ -924,7 +1380,6 @@ void CalculateExpression() {
         
         // Add to history
         std::string historyEntry = displayExpression + " = " + resultStr;
-        
         calculationHistory.push_back(historyEntry);
         
         // Limit history size to 20 entries
@@ -938,11 +1393,64 @@ void CalculateExpression() {
         // Set the result as the new expression
         currentExpression = resultStr;
         
+        logDebug("Updating display with result", "CALC");
         UpdateDisplay(currentExpression);
         newExpression = true;
+        
     } catch (const std::exception& e) {
-        UpdateDisplay(e.what());
-        ClearCalculator();
+        std::string errorMsg = "Error during calculation: " + std::string(e.what());
+        logDebug(errorMsg, "ERROR");
+        
+        // Add to history
+        calculationHistory.push_back(originalExpr + " = Error: " + e.what());
+        
+        // Update history display
+        UpdateHistoryDisplay();
+        
+        // Improved error recovery: don't clear the expression, allow the user to fix it
+        // Check for specific errors and provide helpful messages
+        std::string errorStr = e.what();
+        if (errorStr.find("Function") != std::string::npos && errorStr.find("requires an argument") != std::string::npos) {
+            // Missing function argument
+            MessageBoxW(hWndMain, L"Function requires an argument. Please add a value inside the parentheses.", L"Calculation Error", MB_OK | MB_ICONINFORMATION);
+        } 
+        else if (errorStr.find("must be between") != std::string::npos) {
+            // Out of range argument
+            MessageBoxW(hWndMain, L"Function argument is out of valid range. Please check the input value.", L"Calculation Error", MB_OK | MB_ICONINFORMATION);
+        }
+        else if (errorStr.find("Unknown identifier") != std::string::npos) {
+            // Unknown identifier
+            MessageBoxW(hWndMain, L"Unknown identifier found. Please check for typos or invalid characters.", L"Calculation Error", MB_OK | MB_ICONINFORMATION);
+        }
+        else if (errorStr.find("Division by zero") != std::string::npos) {
+            // Division by zero
+            MessageBoxW(hWndMain, L"Cannot divide by zero.", L"Calculation Error", MB_OK | MB_ICONINFORMATION);
+        }
+        else {
+            // Generic error
+            std::wstring wideErrorMsg = StringToWString("Error: " + errorStr);
+            MessageBoxW(hWndMain, wideErrorMsg.c_str(), L"Calculation Error", MB_OK | MB_ICONINFORMATION);
+        }
+        
+        // Keep the original expression to allow the user to fix it
+        currentExpression = originalExpr;
+        UpdateDisplay(currentExpression);
+        newExpression = false;
+    } catch (...) {
+        std::string errorMsg = "Unknown error during calculation";
+        logDebug(errorMsg, "ERROR");
+        
+        // Add to history
+        calculationHistory.push_back(originalExpr + " = Error: Unknown error");
+        
+        // Update history display
+        UpdateHistoryDisplay();
+        
+        // Keep the original expression to allow the user to fix it
+        MessageBoxW(hWndMain, L"An unknown error occurred during calculation.", L"Calculation Error", MB_OK | MB_ICONINFORMATION);
+        currentExpression = originalExpr;
+        UpdateDisplay(currentExpression);
+        newExpression = false;
     }
 }
 
@@ -956,7 +1464,9 @@ void ClearCalculator() {
 
 // Show About dialog
 void ShowAboutDialog(HWND hwnd) {
-    // Create a simple message box as an About dialog
+    logDebug("About dialog shown", "UI");
+    
+    // Create a simple message box as an About dialog - this is NOT for debugging, it's the actual About dialog
     MessageBoxW(hwnd,
         L"C++ Calculator\n\n"
         L"Version 1.1\n\n"
@@ -990,7 +1500,7 @@ void ShowAboutDialog(HWND hwnd) {
 
 // Check if a character is an operator
 bool IsOperator(char c) {
-    return c == '+' || c == '-' || c == '*' || c == '/' || c == '^';
+    return c == '+' || c == '-' || c == '*' || c == 'x' || c == '/' || c == '^' || c == '%';
 }
 
 // Get operator precedence
@@ -1001,6 +1511,8 @@ int GetPrecedence(char op) {
         return 2;
     if (op == '^')
         return 3;
+    if (op == '%')
+        return 2;  // Same precedence as multiplication/division
     return 0;
 }
 
@@ -1009,64 +1521,453 @@ double ApplyOperator(double a, double b, char op) {
     switch (op) {
         case '+': return a + b;
         case '-': return a - b;
-        case '*': return a * b;
+        case '*': 
+        case 'x': // Handle both '*' and 'x' for multiplication
+            return a * b;
         case '/': 
             if (b == 0) throw std::runtime_error("Division by zero");
             return a / b;
-        case '^': return pow(a, b);
-        default: return 0;
+        case '^': 
+            try {
+                return calculator.power(a, b);
+            } catch (const std::exception& e) {
+                throw std::runtime_error(std::string("Power error: ") + e.what());
+            }
+        case '%': return (a * b) / 100.0; // Percentage of a value
+        default: throw std::runtime_error("Unknown operator: " + std::string(1, op));
     }
 }
 
-// Evaluate a mathematical expression using the Shunting Yard algorithm
+// Helper function to identify functions in expressions
+bool IsFunction(const std::string& token) {
+    static const std::vector<std::string> functions = {
+        "sin", "cos", "tan", "asin", "acos", "atan",
+        "sinh", "cosh", "tanh", "sqrt", "log", "ln",
+        "abs", "fact"
+    };
+    
+    return std::find(functions.begin(), functions.end(), token) != functions.end();
+}
+
+// Helper function to check if a string is a constant
+bool IsConstant(const std::string& token) {
+    return token == "pi" || token == "e";
+}
+
+// Helper function to get value of constants
+double GetConstantValue(const std::string& token) {
+    if (token == "pi") return calculator.getPi();
+    if (token == "e") return calculator.getE();
+    throw std::invalid_argument("Unknown constant: " + token);
+}
+
+// Parse a function call
+double ParseFunction(const std::string& func, const std::string& expr, size_t& i) {
+    logDebug("ParseFunction called with function: " + func + ", expr: " + expr + ", i: " + std::to_string(i), "CALC");
+    
+    // Find the actual position of the function name in the expression
+    size_t funcPos = expr.find(func, i > 0 ? i - 1 : 0);
+    if (funcPos == std::string::npos) {
+        // If not found starting from i, try from the beginning
+        funcPos = expr.find(func);
+    }
+    
+    if (funcPos == std::string::npos) {
+        std::string errorMsg = "Function " + func + " not found in expression " + expr;
+        logDebug(errorMsg, "ERROR");
+        throw std::runtime_error("Function not found in expression");
+    }
+    
+    // Position after function name where the opening parenthesis should be
+    size_t openParenPos = funcPos + func.length();
+    
+    // Make sure there's an opening parenthesis
+    if (openParenPos >= expr.length() || expr[openParenPos] != '(') {
+        std::string errorMsg = "Missing opening parenthesis after function " + func;
+        logDebug(errorMsg, "ERROR");
+        
+        // Try to auto-correct by assuming the next token is the argument
+        if (openParenPos < expr.length() && 
+            (isdigit(expr[openParenPos]) || expr[openParenPos] == '.' || 
+             expr[openParenPos] == 'p' || expr[openParenPos] == 'e')) {
+            
+            // Create a corrected expression with parentheses
+            std::string correctedExpr = expr.substr(0, openParenPos) + "(" + expr.substr(openParenPos);
+            
+            // Find where to put the closing parenthesis
+            size_t closePos = openParenPos + 1;
+            while (closePos < correctedExpr.length() && 
+                  (isdigit(correctedExpr[closePos]) || correctedExpr[closePos] == '.' || 
+                   correctedExpr[closePos] == 'e' || correctedExpr[closePos] == 'E' ||
+                   correctedExpr[closePos] == 'p' || correctedExpr[closePos] == 'i')) {
+                closePos++;
+            }
+            
+            // Insert closing parenthesis
+            correctedExpr.insert(closePos, ")");
+            
+            logDebug("Auto-corrected function call: " + correctedExpr, "CALC");
+            
+            // Recursively call with corrected expression
+            return EvaluateExpression(correctedExpr);
+        }
+        
+        throw std::runtime_error("Missing opening parenthesis after function");
+    }
+    
+    // Start after the opening parenthesis
+    size_t start = openParenPos + 1;
+    size_t pos = start;
+    
+    std::string debugParens = "Parsing function arguments: Start position = " + std::to_string(start) + 
+                            ", Expression length = " + std::to_string(expr.length());
+    logDebug(debugParens, "CALC");
+    
+    // Find the matching closing parenthesis
+    int parenCount = 1;
+    while (pos < expr.length() && parenCount > 0) {
+        if (expr[pos] == '(') parenCount++;
+        if (expr[pos] == ')') parenCount--;
+        pos++;
+    }
+    
+    // Check if we found a matching closing parenthesis
+    if (parenCount > 0) {
+        std::string errorMsg = "Missing closing parenthesis for function " + func;
+        logDebug(errorMsg, "ERROR");
+        throw std::runtime_error("Missing closing parenthesis for function");
+    }
+    
+    // Extract the argument string (excluding the closing parenthesis)
+    std::string argStr = expr.substr(start, pos - start - 1);
+    
+    std::string debugArgStr = "Extracted argument: " + argStr;
+    logDebug(debugArgStr, "CALC");
+    
+    // If argument is empty, provide a more helpful error message based on the function
+    if (argStr.empty()) {
+        std::string errorMsg = "Function " + func + " requires an argument";
+        logDebug(errorMsg, "ERROR");
+        
+        // Provide default values for common functions when possible
+        if (func == "sin" || func == "cos" || func == "tan") {
+            logDebug("Using default value 0 for empty trigonometric function argument", "CALC");
+            argStr = "0";
+        } else if (func == "sqrt") {
+            logDebug("Using default value 0 for empty square root argument", "CALC");
+            argStr = "0";
+        } else if (func == "log" || func == "ln") {
+            logDebug("Using default value 1 for empty logarithm argument", "CALC");
+            argStr = "1";
+        } else if (func == "abs") {
+            logDebug("Using default value 0 for empty absolute value argument", "CALC");
+            argStr = "0";
+        } else if (func == "fact") {
+            logDebug("Using default value 1 for empty factorial argument", "CALC");
+            argStr = "1";
+        } else {
+            throw std::runtime_error("Function " + func + " requires an argument");
+        }
+    }
+    
+    // Update the position to after the closing parenthesis
+    i = pos;
+    
+    // Evaluate the argument
+    double argValue = EvaluateExpression(argStr);
+    
+    // Apply the function
+    double result = 0.0;
+    if (func == "sin") {
+        result = calculator.sine(argValue);
+    } else if (func == "cos") {
+        result = calculator.cosine(argValue);
+    } else if (func == "tan") {
+        result = calculator.tangent(argValue);
+    } else if (func == "asin") {
+        if (argValue < -1.0 || argValue > 1.0) {
+            throw std::runtime_error("Arcsine argument must be between -1 and 1");
+        }
+        result = calculator.arcsine(argValue);
+    } else if (func == "acos") {
+        if (argValue < -1.0 || argValue > 1.0) {
+            throw std::runtime_error("Arccosine argument must be between -1 and 1");
+        }
+        result = calculator.arccosine(argValue);
+    } else if (func == "atan") {
+        result = calculator.arctangent(argValue);
+    } else if (func == "sinh") {
+        result = calculator.sineH(argValue);
+    } else if (func == "cosh") {
+        result = calculator.cosineH(argValue);
+    } else if (func == "tanh") {
+        result = calculator.tangentH(argValue);
+    } else if (func == "sqrt") {
+        if (argValue < 0.0) {
+            throw std::runtime_error("Cannot take square root of negative number");
+        }
+        result = calculator.squareRoot(argValue);
+    } else if (func == "log") {
+        if (argValue <= 0.0) {
+            throw std::runtime_error("Cannot take logarithm of non-positive number");
+        }
+        result = calculator.logarithm(argValue, 10.0);
+    } else if (func == "ln") {
+        if (argValue <= 0.0) {
+            throw std::runtime_error("Cannot take natural logarithm of non-positive number");
+        }
+        result = calculator.naturalLogarithm(argValue);
+    } else if (func == "abs") {
+        result = calculator.absolute(argValue);
+    } else if (func == "fact") {
+        if (argValue < 0 || std::floor(argValue) != argValue) {
+            throw std::runtime_error("Factorial is defined only for non-negative integers");
+        }
+        result = calculator.factorial(argValue);
+    } else {
+        throw std::runtime_error("Unknown function: " + func);
+    }
+    
+    return result;
+}
+
+// Evaluate a mathematical expression with enhanced capabilities
 double EvaluateExpression(const std::string& expression) {
+    std::string debugMsg = "EvaluateExpression called with: " + expression;
+    logDebug(debugMsg, "CALC");
+    
+    // Check if expression contains any function calls without proper parentheses
+    // This is a common problem with inputs like "cos5" instead of "cos(5)"
+    std::vector<std::string> functions = {"sin", "cos", "tan", "asin", "acos", "atan", 
+                                        "sinh", "cosh", "tanh", "sqrt", "log", "ln",
+                                        "abs", "fact"};
+    
+    std::string processedExpr = expression;
+    
+    // Check for function calls without opening parenthesis
+    for (const std::string& func : functions) {
+        size_t pos = 0;
+        while ((pos = processedExpr.find(func, pos)) != std::string::npos) {
+            // Make sure we found the function name, not part of another token
+            bool isValidFunction = false;
+            
+            // If it's at the beginning of the string or preceded by an operator or opening parenthesis
+            if (pos == 0 || IsOperator(processedExpr[pos-1]) || processedExpr[pos-1] == '(' || 
+                processedExpr[pos-1] == '*' || processedExpr[pos-1] == '/' || 
+                processedExpr[pos-1] == '+' || processedExpr[pos-1] == '-') {
+                isValidFunction = true;
+            }
+            
+            if (isValidFunction) {
+                // Check if function is followed by opening parenthesis
+                size_t nextPos = pos + func.length();
+                if (nextPos < processedExpr.length() && processedExpr[nextPos] != '(') {
+                    // No opening parenthesis, so we need to add one
+                    // Make sure there's actually something after the function
+                    if (nextPos < processedExpr.length() && 
+                        (isdigit(processedExpr[nextPos]) || processedExpr[nextPos] == '.' || 
+                         processedExpr[nextPos] == 'p' || processedExpr[nextPos] == 'e')) {
+                        
+                        // Insert opening parenthesis
+                        processedExpr.insert(nextPos, "(");
+                        
+                        // Find the end of the argument
+                        size_t argEnd = nextPos + 1;
+                        int nestedParens = 0;
+                        
+                        // Handle more complex arguments like abs(2+3) or fact(pi)
+                        while (argEnd < processedExpr.length()) {
+                            if (processedExpr[argEnd] == '(') {
+                                nestedParens++;
+                            } else if (processedExpr[argEnd] == ')') {
+                                if (nestedParens == 0) break;
+                                nestedParens--;
+                            } else if (nestedParens == 0 && IsOperator(processedExpr[argEnd]) && 
+                                      argEnd > nextPos + 1) {
+                                break;
+                            }
+                            argEnd++;
+                        }
+                        
+                        // If we reached the end without finding a proper end, use the whole rest of the expression
+                        if (argEnd == processedExpr.length()) {
+                            processedExpr += ")";
+                        } else if (!IsOperator(processedExpr[argEnd]) && processedExpr[argEnd] != ')') {
+                            // If we stopped at a non-operator, non-parenthesis character, include it
+                            processedExpr.insert(argEnd + 1, ")");
+                        } else {
+                            // Otherwise insert before the operator or closing parenthesis
+                            processedExpr.insert(argEnd, ")");
+                        }
+                        
+                        std::string fixedExpr = "Auto-fixed function '" + func + "' without parentheses: " + processedExpr;
+                        logDebug(fixedExpr, "CALC");
+                    }
+                }
+            }
+            
+            // Move past this occurrence
+            pos += func.length();
+        }
+    }
+    
+    // If the expression was modified, use the processed expression
+    if (processedExpr != expression) {
+        logDebug("Using modified expression: " + processedExpr, "CALC");
+        return EvaluateExpression(processedExpr);
+    }
+    
+    // If expression is empty, return 0
+    if (expression.empty()) {
+        logDebug("Expression is empty, returning 0", "CALC");
+        return 0.0;
+    }
+    
     std::stack<double> values;
     std::stack<char> operators;
+    std::string currentToken;
+    bool expectingOperand = true;
+    
+    logDebug("Starting to parse expression", "CALC");
     
     for (size_t i = 0; i < expression.length(); i++) {
         // Skip spaces
         if (expression[i] == ' ')
             continue;
         
+        // Handle unary minus
+        if (expression[i] == '-' && expectingOperand) {
+            logDebug("Found unary minus", "CALC");
+            values.push(0);    // Add 0 before - to convert to binary operation
+            operators.push('-');
+            expectingOperand = true;
+            continue;
+        }
+        
+        // Handle unary plus (just ignore it)
+        if (expression[i] == '+' && expectingOperand) {
+            logDebug("Found unary plus, ignoring", "CALC");
+            continue;  // Just ignore unary plus
+        }
+        
         // If current character is an opening bracket, push it to operators stack
         if (expression[i] == '(') {
             operators.push(expression[i]);
+            expectingOperand = true;
+            continue;
         }
+        
         // If current character is a closing bracket, solve the entire bracket
-        else if (expression[i] == ')') {
-            while (!operators.empty() && operators.top() != '(') {
-                double val2 = values.top(); values.pop();
-                double val1 = values.top(); values.pop();
-                char op = operators.top(); operators.pop();
-                
-                values.push(ApplyOperator(val1, val2, op));
+        if (expression[i] == ')') {
+            // If we're expecting an operand, there's a syntax error
+            if (expectingOperand) {
+                throw std::runtime_error("Invalid expression: empty parentheses or missing operand before ')'");
             }
             
-            // Remove the '(' from the stack
-            if (!operators.empty())
-                operators.pop();
+            bool foundMatchingParen = false;
+            
+            while (!operators.empty()) {
+                if (operators.top() == '(') {
+                    foundMatchingParen = true;
+                    operators.pop(); // Remove the '('
+                    break;
+                }
+                
+                char op = operators.top(); operators.pop();
+                
+                if (values.size() < 2) {
+                    throw std::runtime_error("Invalid expression: not enough operands for operator '" + std::string(1, op) + "'");
+                }
+                
+                double val2 = values.top(); values.pop();
+                double val1 = values.top(); values.pop();
+                
+                try {
+                    values.push(ApplyOperator(val1, val2, op));
+                } catch (const std::exception& e) {
+                    throw std::runtime_error(std::string(e.what()) + " when evaluating " + 
+                                            std::to_string(val1) + " " + op + " " + std::to_string(val2));
+                }
+            }
+            
+            if (!foundMatchingParen) {
+                throw std::runtime_error("Mismatched parentheses: extra ')'");
+            }
+            
+            expectingOperand = false;
+            continue;
         }
+        
+        // Check for functions and constants
+        if (isalpha(expression[i])) {
+            currentToken.clear();
+            
+            // Extract function name or constant
+            while (i < expression.length() && (isalpha(expression[i]) || isdigit(expression[i]))) {
+                currentToken += expression[i++];
+            }
+            i--; // Move back to the last character of token
+            
+            // Check if we have a constant (pi or e)
+            if (IsConstant(currentToken)) {
+                values.push(GetConstantValue(currentToken));
+                expectingOperand = false;
+                continue;
+            }
+            
+            // Check if we have a function call
+            if (IsFunction(currentToken) && i + 1 < expression.length() && expression[i + 1] == '(') {
+                try {
+                    double functionResult = ParseFunction(currentToken, expression, i);
+                    values.push(functionResult);
+                    expectingOperand = false;
+                    i--; // Adjust for the loop increment
+                    continue;
+                } catch (const std::exception& e) {
+                    throw std::runtime_error(std::string(e.what()));
+                }
+            }
+            
+            throw std::runtime_error("Unknown identifier: '" + currentToken + "'");
+        }
+        
         // If current character is an operator
-        else if (IsOperator(expression[i])) {
-            // Handle unary minus
-            if (expression[i] == '-' && (i == 0 || IsOperator(expression[i-1]) || expression[i-1] == '(')) {
-                values.push(0);
+        if (IsOperator(expression[i])) {
+            // Can't have operator after another operator (except unary)
+            if (expectingOperand) {
+                throw std::runtime_error("Invalid expression: operator '" + std::string(1, expression[i]) + 
+                                         "' cannot follow another operator");
             }
             
             // While top of operators has same or greater precedence
-            while (!operators.empty() && GetPrecedence(operators.top()) >= GetPrecedence(expression[i])) {
-                double val2 = values.top(); values.pop();
-                double val1 = values.top(); values.pop();
+            while (!operators.empty() && operators.top() != '(' &&
+                   GetPrecedence(operators.top()) >= GetPrecedence(expression[i])) {
                 char op = operators.top(); operators.pop();
                 
-                values.push(ApplyOperator(val1, val2, op));
+                if (values.size() < 2) {
+                    throw std::runtime_error("Invalid expression: not enough operands for operator '" + 
+                                            std::string(1, op) + "'");
+                }
+                
+                double val2 = values.top(); values.pop();
+                double val1 = values.top(); values.pop();
+                
+                try {
+                    values.push(ApplyOperator(val1, val2, op));
+                } catch (const std::exception& e) {
+                    throw std::runtime_error(std::string(e.what()) + " when evaluating " + 
+                                            std::to_string(val1) + " " + op + " " + std::to_string(val2));
+                }
             }
             
             // Push current operator to stack
             operators.push(expression[i]);
+            expectingOperand = true;
+            continue;
         }
-        // If current character is a number
-        else {
+        
+        // If current character is a number or decimal point
+        if (isdigit(expression[i]) || expression[i] == '.') {
             std::string currentNumber;
             
             // Extract the complete number
@@ -1075,22 +1976,70 @@ double EvaluateExpression(const std::string& expression) {
             }
             i--; // Move back one position as the for loop will increment
             
+            // Validate the number
+            if (std::count(currentNumber.begin(), currentNumber.end(), '.') > 1) {
+                throw std::runtime_error("Invalid number format: multiple decimal points in '" + currentNumber + "'");
+            }
+            
             // Convert string to double and push to values stack
-            values.push(std::stod(currentNumber));
+            try {
+                values.push(std::stod(currentNumber));
+            } catch (...) {
+                throw std::runtime_error("Invalid number format: '" + currentNumber + "'");
+            }
+            
+            expectingOperand = false;
+            continue;
         }
+        
+        // If we reach here, the character is not recognized
+        throw std::runtime_error("Unrecognized character in expression: '" + std::string(1, expression[i]) + "'");
+    }
+    
+    // Check for incomplete expression (ending with an operator)
+    if (expectingOperand && !operators.empty()) {
+        throw std::runtime_error("Invalid expression: ends with an operator");
     }
     
     // Process all remaining operators
     while (!operators.empty()) {
-        double val2 = values.top(); values.pop();
-        double val1 = values.top(); values.pop();
         char op = operators.top(); operators.pop();
         
-        values.push(ApplyOperator(val1, val2, op));
+        if (op == '(') {
+            throw std::runtime_error("Mismatched parentheses: extra '('");
+        }
+        
+        if (values.size() < 2) {
+            throw std::runtime_error("Invalid expression: not enough operands for operator '" + std::string(1, op) + "'");
+        }
+        
+        double val2 = values.top(); values.pop();
+        double val1 = values.top(); values.pop();
+        
+        try {
+            values.push(ApplyOperator(val1, val2, op));
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string(e.what()) + " when evaluating " + 
+                                    std::to_string(val1) + " " + op + " " + std::to_string(val2));
+        }
     }
     
-    // Final result should be at the top of the values stack
-    return values.top();
+    // Final result should be on top of the values stack
+    if (values.empty()) {
+        logDebug("Values stack is empty, error: no operands", "ERROR");
+        throw std::runtime_error("Invalid expression: no operands");
+    }
+    
+    if (values.size() != 1) {
+        logDebug("Error: too many operands left on stack", "ERROR");
+        throw std::runtime_error("Invalid expression: too many operands");
+    }
+    
+    double result = values.top();
+    std::string resultMsg = "Final result: " + std::to_string(result);
+    logDebug(resultMsg, "CALC");
+    
+    return result;
 }
 
 // Function to switch to the next theme
@@ -1100,8 +2049,8 @@ void SwitchTheme() {
     currentTheme = &availableThemes[currentThemeIndex];
     
     // Show theme change message
-    std::wstring message = L"Theme changed to: " + currentTheme->name;
-    MessageBoxW(NULL, message.c_str(), L"Theme Changed", MB_OK | MB_ICONINFORMATION);
+    std::string themeName = WStringToString(currentTheme->name);
+    logDebug("Theme changed to: " + themeName, "UI");
 }
 
 // Function to apply the current theme to all UI elements
@@ -1123,4 +2072,114 @@ void ApplyTheme(HWND hwnd) {
     // Force repaint
     InvalidateRect(hwnd, NULL, TRUE);
     UpdateWindow(hwnd);
-} 
+}
+
+// Helper function to check if a string is a valid identifier
+bool IsValidIdentifier(const std::string& token) {
+    // Check if it's a function
+    if (IsFunction(token)) return true;
+    
+    // Check if it's a constant
+    if (IsConstant(token)) return true;
+    
+    // Check if it's a number (can start with a digit or decimal point)
+    if (!token.empty() && (isdigit(token[0]) || token[0] == '.')) {
+        bool hasDecimal = false;
+        for (size_t i = 0; i < token.length(); i++) {
+            if (token[i] == '.') {
+                if (hasDecimal) return false; // Multiple decimal points
+                hasDecimal = true;
+            } else if (!isdigit(token[i])) {
+                return false; // Non-digit character
+            }
+        }
+        return true;
+    }
+    
+    // Not a valid identifier
+    return false;
+}
+
+// Helper function to extract the last token from an expression
+std::string GetLastToken(const std::string& expr) {
+    if (expr.empty()) return "";
+    
+    // Find the last non-alphanumeric character (operator or parenthesis)
+    size_t lastNonAlphaNumPos = expr.find_last_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.");
+    
+    // If not found or it's the last character, there's no token
+    if (lastNonAlphaNumPos == std::string::npos) {
+        return expr; // The entire expression is one token
+    } else if (lastNonAlphaNumPos == expr.length() - 1) {
+        return ""; // The last character is an operator or parenthesis
+    }
+    
+    // Extract the token after the last non-alphanumeric character
+    return expr.substr(lastNonAlphaNumPos + 1);
+}
+
+// Format expression with visual cues for operator precedence
+std::string FormatExpressionWithPrecedence(const std::string& expr) {
+    std::string result = expr;
+    
+    // Replace * with × for display
+    size_t pos = 0;
+    while ((pos = result.find('*', pos)) != std::string::npos) {
+        result.replace(pos, 1, "x");
+        pos += 1;
+    }
+    
+    // Add subtle visual cues for operator precedence
+    // First, find all operators and their positions
+    std::vector<std::pair<size_t, char>> operators;
+    for (size_t i = 0; i < result.length(); i++) {
+        char currentChar = result[i];
+        if (currentChar == '+' || currentChar == '-' || 
+            currentChar == 'x' || currentChar == '/' || 
+            currentChar == '^' || currentChar == '%') {
+            operators.push_back({i, currentChar});
+        }
+    }
+    
+    // Process operators from highest to lowest precedence
+    // First pass: add spaces around operators based on precedence
+    for (auto it = operators.rbegin(); it != operators.rend(); ++it) {
+        size_t pos = it->first;
+        char op = it->second;
+        
+        // Skip if this is a unary operator
+        if (pos == 0 || result[pos-1] == '(' || 
+            (pos > 0 && (result[pos-1] == '+' || result[pos-1] == '-' || 
+                         result[pos-1] == 'x' || result[pos-1] == '/' || 
+                         result[pos-1] == '^' || result[pos-1] == '%'))) {
+            continue;
+        }
+        
+        // Get precedence of this operator
+        int precedence = 0;
+        if (op == '+' || op == '-') precedence = 1;
+        else if (op == 'x' || op == '/' || op == '%') precedence = 2;
+        else if (op == '^') precedence = 3;
+        
+        // Add spaces based on precedence (higher precedence = fewer spaces)
+        std::string replacement;
+        switch (precedence) {
+            case 1: replacement = " " + std::string(1, op) + " "; break;  // Lowest precedence
+            case 2: replacement = " " + std::string(1, op) + " "; break;  // Medium precedence
+            case 3: replacement = " " + std::string(1, op) + " "; break;  // Highest precedence
+            default: replacement = std::string(1, op); break;
+        }
+        
+        // Replace the operator with the formatted version
+        result.replace(pos, 1, replacement);
+        
+        // Update positions of subsequent operators
+        for (auto jt = it.base(); jt != operators.end(); ++jt) {
+            if (jt->first > pos) {
+                jt->first += replacement.length() - 1;
+            }
+        }
+    }
+    
+    return result;
+}
