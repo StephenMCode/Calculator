@@ -3,19 +3,30 @@
 #include <sstream>
 #include <vector>
 #include <memory>
+#include <codecvt>
+#include <locale>
 #include "calculator.h"
+
+// Helper function to convert std::string to std::wstring
+std::wstring StringToWString(const std::string& str) {
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    return converter.from_bytes(str);
+}
 
 // Global variables
 HWND hWndMain;                  // Main window handle
 HWND hWndDisplay;               // Display field
 HWND hWndOperationDisplay;      // Operation display field
-HWND hWndButtons[25];           // Button handles
+HWND hWndMemoryIndicator;       // Memory indicator field
+HWND hWndButtons[29];           // Button handles (increased for memory buttons)
 Calculator calculator;          // Calculator instance
 std::string currentInput = "";  // Current input string
 double firstNumber = 0.0;       // First operand
 char currentOperation = '\0';   // Current operation
 bool newCalculation = true;     // Flag for new calculation
 bool waitingForSecondNumber = false; // Flag for waiting for second number
+double memoryValue = 0.0;       // Memory storage value
+bool memoryHasValue = false;    // Flag indicating if memory has a value
 
 // Button definitions
 struct ButtonDef {
@@ -33,10 +44,15 @@ void CreateCalculatorUI(HWND hwnd);
 void HandleButtonClick(const char* buttonText);
 void UpdateDisplay(const std::string& text);
 void UpdateOperationDisplay();
+void UpdateMemoryIndicator();
 void ProcessOperation(char operation);
 void PerformCalculation();
 void ClearCalculator();
 void ShowAboutDialog(HWND hwnd);
+void MemoryAdd();
+void MemorySubtract();
+void MemoryRecall();
+void MemoryClear();
 
 // Entry point
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
@@ -60,7 +76,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, // Window style
         
         // Size and position
-        CW_USEDEFAULT, CW_USEDEFAULT, 320, 500,
+        CW_USEDEFAULT, CW_USEDEFAULT, 320, 550, // Increased height for memory buttons
         
         NULL,       // Parent window    
         NULL,       // Menu
@@ -74,6 +90,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     // Create calculator UI elements
     CreateCalculatorUI(hWndMain);
+    
+    // Initialize memory indicator
+    UpdateMemoryIndicator();
     
     // Show the window
     ShowWindow(hWndMain, nCmdShow);
@@ -99,7 +118,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int buttonId = LOWORD(wParam);
             
             // Handle button clicks
-            if (buttonId >= 1000 && buttonId < 1025) {
+            if (buttonId >= 1000 && buttonId < 1029) {
                 HWND buttonHwnd = (HWND)lParam;
                 char buttonText[20];
                 GetWindowText(buttonHwnd, buttonText, sizeof(buttonText));
@@ -159,7 +178,13 @@ void CreateCalculatorUI(HWND hwnd) {
         
         // Row 6 (new row for log and About)
         {"log", 20, 400, 130, 40, RGB(173, 216, 230)},
-        {"About", 160, 400, 130, 40, RGB(200, 200, 200)}
+        {"About", 160, 400, 130, 40, RGB(200, 200, 200)},
+        
+        // Row 7 (memory buttons)
+        {"M+", 20, 450, 60, 50, RGB(255, 128, 128)},
+        {"M-", 90, 450, 60, 50, RGB(173, 216, 230)},
+        {"MR", 160, 450, 60, 50, RGB(240, 240, 240)},
+        {"MC", 230, 450, 60, 50, RGB(173, 216, 230)}
     };
     
     // Create operation display field (small field above the main display)
@@ -168,6 +193,14 @@ void CreateCalculatorUI(HWND hwnd) {
         WS_CHILD | WS_VISIBLE | ES_RIGHT | ES_READONLY,
         20, 20, 270, 25,
         hwnd, (HMENU)998, NULL, NULL
+    );
+    
+    // Create memory indicator (small field to the left of the operation display)
+    hWndMemoryIndicator = CreateWindowEx(
+        0, "STATIC", "",
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        290, 20, 20, 25,
+        hwnd, (HMENU)997, NULL, NULL
     );
     
     // Create main display field
@@ -226,6 +259,27 @@ void HandleButtonClick(const char* buttonText) {
             currentInput += buttonText;
         }
         UpdateDisplay(currentInput);
+        return;
+    }
+    
+    // Handle memory operations
+    if (strcmp(buttonText, "M+") == 0) {
+        MemoryAdd();
+        return;
+    }
+    
+    if (strcmp(buttonText, "M-") == 0) {
+        MemorySubtract();
+        return;
+    }
+    
+    if (strcmp(buttonText, "MR") == 0) {
+        MemoryRecall();
+        return;
+    }
+    
+    if (strcmp(buttonText, "MC") == 0) {
+        MemoryClear();
         return;
     }
     
@@ -388,6 +442,63 @@ void UpdateOperationDisplay() {
     SetWindowText(hWndOperationDisplay, operationText.c_str());
 }
 
+// Update the memory indicator
+void UpdateMemoryIndicator() {
+    if (memoryHasValue) {
+        SetWindowText(hWndMemoryIndicator, "M");
+    } else {
+        SetWindowText(hWndMemoryIndicator, "");
+    }
+}
+
+// Memory operations
+void MemoryAdd() {
+    if (!currentInput.empty()) {
+        try {
+            double value = std::stod(currentInput);
+            memoryValue += value;
+            memoryHasValue = true;
+            UpdateMemoryIndicator();
+            newCalculation = true;
+        } catch (...) {
+            // Handle error
+        }
+    }
+}
+
+void MemorySubtract() {
+    if (!currentInput.empty()) {
+        try {
+            double value = std::stod(currentInput);
+            memoryValue -= value;
+            memoryHasValue = true;
+            UpdateMemoryIndicator();
+            newCalculation = true;
+        } catch (...) {
+            // Handle error
+        }
+    }
+}
+
+void MemoryRecall() {
+    if (memoryHasValue) {
+        currentInput = std::to_string(memoryValue);
+        // Remove trailing zeros
+        currentInput.erase(currentInput.find_last_not_of('0') + 1, std::string::npos);
+        if (currentInput.back() == '.') {
+            currentInput.pop_back();
+        }
+        UpdateDisplay(currentInput);
+        newCalculation = false;
+    }
+}
+
+void MemoryClear() {
+    memoryValue = 0.0;
+    memoryHasValue = false;
+    UpdateMemoryIndicator();
+}
+
 // Perform calculation
 void PerformCalculation() {
     try {
@@ -424,6 +535,7 @@ void ClearCalculator() {
     waitingForSecondNumber = false;
     UpdateDisplay(currentInput);
     UpdateOperationDisplay(); // Clear operation display
+    // Note: Memory is not cleared by the C button
 }
 
 // Show About dialog

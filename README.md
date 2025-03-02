@@ -16,6 +16,13 @@ A comprehensive calculator application written in C++ with a graphical user inte
   - Logarithm with custom base (log)
   - Natural Logarithm (ln)
 
+- Memory functions:
+  - Memory Add (M+)
+  - Memory Subtract (M-)
+  - Memory Recall (MR)
+  - Memory Clear (MC)
+  - Memory indicator showing when a value is stored
+
 - User-friendly graphical interface with:
   - Numeric keypad (0-9)
   - Decimal point (.)
@@ -73,10 +80,12 @@ The graphical interface provides:
 - Decimal point (.)
 - Operation buttons (+, -, x, /)
 - Scientific operation buttons (s, ^, ln, log)
+- Memory operation buttons (M+, M-, MR, MC)
 - Clear button (C)
 - Equals button (=)
 - About button
 - Operation display showing the current operation and first operand
+- Memory indicator showing when a value is stored in memory
 
 ### Example Operations
 
@@ -84,6 +93,14 @@ The graphical interface provides:
 - Power: 2^3 = 8
 - Logarithm: log_10(100) = 2
 - Natural Logarithm: ln(2.71828) ≈ 1
+
+### Memory Operations
+
+- M+: Add the current display value to memory
+- M-: Subtract the current display value from memory
+- MR: Recall the value stored in memory
+- MC: Clear the memory
+- Memory indicator (M): Appears when a value is stored in memory
 
 ## License
 
