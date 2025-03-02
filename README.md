@@ -1,12 +1,28 @@
 # C++ Calculator
 
-A simple calculator application written in C++ that performs basic arithmetic operations.
+A comprehensive calculator application written in C++ that performs both basic arithmetic and scientific operations.
 
 ## Features
 
-- Basic arithmetic operations (addition, subtraction, multiplication, division)
-- Command-line interface
-- Error handling for invalid inputs
+- Basic arithmetic operations:
+  - Addition (+)
+  - Subtraction (-)
+  - Multiplication (*)
+  - Division (/)
+  
+- Scientific operations:
+  - Square Root (s)
+  - Power/Exponentiation (p)
+  - Logarithm with custom base (l)
+  - Natural Logarithm (n)
+
+- User-friendly command-line interface
+- Robust error handling for:
+  - Invalid operations
+  - Invalid inputs
+  - Division by zero
+  - Negative square roots
+  - Invalid logarithm arguments
 
 ## Requirements
 
@@ -36,7 +52,28 @@ make
 ./calculator
 ```
 
-Follow the on-screen instructions to perform calculations.
+Follow the on-screen instructions to perform calculations:
+
+1. Select an operation from the menu
+2. Enter the required number(s)
+3. View the result
+4. Continue with another calculation or quit
+
+### Example Operations
+
+- Square Root: `sqrt(25) = 5`
+- Power: `2^3 = 8`
+- Logarithm: `log_10(100) = 2`
+- Natural Logarithm: `ln(2.71828) ≈ 1`
+
+## Future Enhancements
+
+Planned features for future versions:
+- Memory functions (store, recall, clear)
+- Trigonometric functions (sin, cos, tan)
+- Percentage calculations
+- Unit conversions
+- Graphical user interface
 
 ## License
 
