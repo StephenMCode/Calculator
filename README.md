@@ -30,6 +30,7 @@ A comprehensive calculator application written in C++ with a graphical user inte
   - Clear button (C)
   - About dialog
   - Operation display showing current calculation
+  - History display showing previous calculations
 
 - Robust error handling for:
   - Invalid operations
@@ -86,6 +87,7 @@ The graphical interface provides:
 - About button
 - Operation display showing the current operation and first operand
 - Memory indicator showing when a value is stored in memory
+- History display showing previous calculations in chronological order (newest at the top)
 
 ### Example Operations
 
@@ -101,6 +103,15 @@ The graphical interface provides:
 - MR: Recall the value stored in memory
 - MC: Clear the memory
 - Memory indicator (M): Appears when a value is stored in memory
+
+### History Display
+
+The calculator includes a history panel that:
+- Displays all calculations performed in the current session
+- Shows the most recent calculations at the top
+- Includes both the expression and the result
+- Allows scrolling through previous calculations
+- Persists until the application is closed
 
 ## License
 
