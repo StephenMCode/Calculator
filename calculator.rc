@@ -1,0 +1,31 @@
+#include <windows.h>
+
+// Version information
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4" // U.S. English
+        BEGIN
+            VALUE "CompanyName",      ""
+            VALUE "FileDescription",  "C++ Calculator with GUI"
+            VALUE "FileVersion",      "1.0.0.0"
+            VALUE "InternalName",     "calculator"
+            VALUE "LegalCopyright",   "MIT License"
+            VALUE "OriginalFilename", "calculator.exe"
+            VALUE "ProductName",      "C++ Calculator"
+            VALUE "ProductVersion",   "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252 // U.S. English
+    END
+END 

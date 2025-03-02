@@ -1,22 +1,29 @@
 # C++ Calculator
 
-A comprehensive calculator application written in C++ that performs both basic arithmetic and scientific operations.
+A comprehensive calculator application written in C++ with a graphical user interface using the Windows API.
 
 ## Features
 
 - Basic arithmetic operations:
   - Addition (+)
   - Subtraction (-)
-  - Multiplication (*)
+  - Multiplication (x)
   - Division (/)
   
 - Scientific operations:
   - Square Root (s)
-  - Power/Exponentiation (p)
-  - Logarithm with custom base (l)
-  - Natural Logarithm (n)
+  - Power/Exponentiation (^)
+  - Logarithm with custom base (log)
+  - Natural Logarithm (ln)
 
-- User-friendly command-line interface
+- User-friendly graphical interface with:
+  - Numeric keypad (0-9)
+  - Decimal point (.)
+  - Operation buttons
+  - Clear button (C)
+  - About dialog
+  - Operation display showing current calculation
+
 - Robust error handling for:
   - Invalid operations
   - Invalid inputs
@@ -26,45 +33,57 @@ A comprehensive calculator application written in C++ that performs both basic a
 
 ## Requirements
 
-- C++ compiler (supporting C++11 or later)
-- CMake (optional, for building)
+- Windows operating system
+- g++ compiler (supporting C++11 or later)
+- windres (for compiling resources)
 
 ## Building the Project
 
-### Using g++ directly
+Use the provided compile.bat script:
 
 ```bash
-g++ -o calculator main.cpp calculator.cpp -std=c++11
+compile.bat
 ```
 
-### Using CMake
+Or compile manually:
 
 ```bash
-mkdir build
-cd build
-cmake ..
-make
+windres calculator.rc -O coff -o calculator.res
+g++ -std=c++11 -mwindows main.cpp calculator.cpp calculator.res -o calculator.exe
+```
+
+## Running the Application
+
+Use the provided run.bat script:
+
+```bash
+run.bat
+```
+
+Or run directly:
+
+```bash
+calculator.exe
 ```
 
 ## Usage
 
-```bash
-./calculator
-```
-
-Follow the on-screen instructions to perform calculations:
-
-1. Select an operation from the menu
-2. Enter the required number(s)
-3. View the result
-4. Continue with another calculation or quit
+The graphical interface provides:
+- Numeric keypad (0-9)
+- Decimal point (.)
+- Operation buttons (+, -, x, /)
+- Scientific operation buttons (s, ^, ln, log)
+- Clear button (C)
+- Equals button (=)
+- About button
+- Operation display showing the current operation and first operand
 
 ### Example Operations
 
-- Square Root: `sqrt(25) = 5`
-- Power: `2^3 = 8`
-- Logarithm: `log_10(100) = 2`
-- Natural Logarithm: `ln(2.71828) ≈ 1`
+- Square Root: s(25) = 5
+- Power: 2^3 = 8
+- Logarithm: log_10(100) = 2
+- Natural Logarithm: ln(2.71828) ≈ 1
 
 ## License
 

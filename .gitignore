@@ -1,5 +1,6 @@
 # Build directories
 build/
+build-release/
 out/
 bin/
 lib/
@@ -34,6 +35,9 @@ x86/
 *.out
 *.app
 calculator
+
+# Resource files
+*.res
 
 # CMake generated files
 CMakeCache.txt
