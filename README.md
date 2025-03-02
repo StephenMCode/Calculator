@@ -66,15 +66,6 @@ Follow the on-screen instructions to perform calculations:
 - Logarithm: `log_10(100) = 2`
 - Natural Logarithm: `ln(2.71828) ≈ 1`
 
-## Future Enhancements
-
-Planned features for future versions:
-- Memory functions (store, recall, clear)
-- Trigonometric functions (sin, cos, tan)
-- Percentage calculations
-- Unit conversions
-- Graphical user interface
-
 ## License
 
 This project is open source and available under the [MIT License](LICENSE). 
