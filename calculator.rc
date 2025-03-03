@@ -1,6 +1,5 @@
 #include <windows.h>
 
-// Version information
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     1,0,0,0
 PRODUCTVERSION  1,0,0,0
@@ -12,7 +11,7 @@ FILESUBTYPE     VFT2_UNKNOWN
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
-        BLOCK "040904E4" // U.S. English
+        BLOCK "040904E4"
         BEGIN
             VALUE "CompanyName",      ""
             VALUE "FileDescription",  "C++ Calculator with GUI"
@@ -26,6 +25,6 @@ BEGIN
     END
     BLOCK "VarFileInfo"
     BEGIN
-        VALUE "Translation", 0x409, 1252 // U.S. English
+        VALUE "Translation", 0x409, 1252
     END
 END 

@@ -3,7 +3,6 @@
 #include <cmath>
 #include <algorithm>
 
-// Define constants if not already defined
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -17,7 +16,6 @@ Calculator::Calculator() {
 }
 
 void Calculator::initializeFunctions() {
-    // Map function names to their implementations
     functions["sin"] = [this](double a) { return this->sine(a); };
     functions["cos"] = [this](double a) { return this->cosine(a); };
     functions["tan"] = [this](double a) { return this->tangent(a); };
@@ -61,13 +59,10 @@ double Calculator::squareRoot(double a) {
 }
 
 double Calculator::power(double base, double exponent) {
-    // Special case for negative base with integer exponent
     if (base < 0 && std::floor(exponent) == exponent) {
         if (std::fmod(exponent, 2.0) == 0.0) {
-            // Even exponent
             return std::pow(-base, exponent);
         } else {
-            // Odd exponent
             return -std::pow(-base, exponent);
         }
     }
@@ -123,7 +118,6 @@ double Calculator::tangent(double a, bool inDegrees) {
     if (inDegrees) {
         a = degreesToRadians(a);
     }
-    // Check for undefined values (cos(a) ≈ 0)
     if (std::abs(std::cos(a)) < 1e-10) {
         throw std::invalid_argument("Tangent is undefined at this angle");
     }
@@ -173,7 +167,6 @@ double Calculator::tangentH(double a) {
 }
 
 double Calculator::factorial(double a) {
-    // Check if a is a non-negative integer
     if (a < 0 || std::floor(a) != a) {
         throw std::invalid_argument("Factorial is defined only for non-negative integers");
     }
@@ -243,4 +236,4 @@ double Calculator::calculateFunction(const std::string& funcName, double a) {
     } else {
         throw std::invalid_argument("Unknown function: " + funcName);
     }
-} 
+}
