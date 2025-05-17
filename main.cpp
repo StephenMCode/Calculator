@@ -180,6 +180,9 @@ HWND hWndDisplay;
 HWND hWndMemoryIndicator;
 HWND hWndHistoryList;
 HWND hWndButtons[45];
+HFONT hDisplayFont = NULL;
+HFONT hHistoryFont = NULL;
+HFONT hButtonFonts[45] = { NULL };
 Calculator calculator;
 std::string currentExpression = "0";
 std::string previousExpression = "0";
@@ -679,15 +682,15 @@ void CreateCalculatorUI(HWND hwnd) {
     
     SendMessage(hWndHistoryList, EM_SETBKGNDCOLOR, 0, currentTheme->historyBackground);
     
-    HFONT hHistoryFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    hHistoryFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                           DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                           CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SendMessage(hWndHistoryList, WM_SETFONT, (WPARAM)hHistoryFont, TRUE);
     
-    HFONT hFont = CreateFontW(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    hDisplayFont = CreateFontW(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    SendMessage(hWndDisplay, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessage(hWndDisplay, WM_SETFONT, (WPARAM)hDisplayFont, TRUE);
     
     for (size_t i = 0; i < buttons.size(); i++) {
         const ButtonDef& btn = buttons[i];
@@ -698,10 +701,10 @@ void CreateCalculatorUI(HWND hwnd) {
             hwnd, (HMENU)(1000 + i), GetModuleHandle(NULL), NULL
         );
         
-        HFONT hBtnFont = CreateFontW(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        hButtonFonts[i] = CreateFontW(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                                   CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        SendMessage(hWndButtons[i], WM_SETFONT, (WPARAM)hBtnFont, TRUE);
+        SendMessage(hWndButtons[i], WM_SETFONT, (WPARAM)hButtonFonts[i], TRUE);
     }
 }
 
@@ -1881,11 +1884,28 @@ void CleanupResources() {
         DeleteObject(themeBackgroundBrush);
         themeBackgroundBrush = NULL;
     }
-    
+
     for (int i = 0; i < 10; i++) {
         if (buttonBrushes[i] != NULL) {
             DeleteObject(buttonBrushes[i]);
             buttonBrushes[i] = NULL;
+        }
+    }
+
+    if (hDisplayFont != NULL) {
+        DeleteObject(hDisplayFont);
+        hDisplayFont = NULL;
+    }
+
+    if (hHistoryFont != NULL) {
+        DeleteObject(hHistoryFont);
+        hHistoryFont = NULL;
+    }
+
+    for (int i = 0; i < 45; i++) {
+        if (hButtonFonts[i] != NULL) {
+            DeleteObject(hButtonFonts[i]);
+            hButtonFonts[i] = NULL;
         }
     }
 }
