@@ -1654,6 +1654,7 @@ double EvaluateExpression(const std::string& expression) {
         
         if (expression[i] == '-' && expectingOperand) {
             logDebug("Found unary minus", "CALC");
+            values.push(0.0);
             operators.push('-');
             expectingOperand = true;
             continue;
